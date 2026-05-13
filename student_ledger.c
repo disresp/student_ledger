@@ -30,24 +30,24 @@
  *  КОНСТАНТЫ
  * ========================================================== */
 
-#define SCREEN_W   1200    /* ширина окна */
-#define SCREEN_H   700     /* высота окна */
-#define MAX_STUD   10      /* количество студентов (фикс. массив) */
+#define SCREEN_W   1200
+#define SCREEN_H   700
+#define MAX_STUD   10
 
-#define MAX_SPEC   50      /* макс. длина специальности */
-#define MAX_NAME   100     /* макс. длина ФИО */
-#define MAX_FORM   12      /* макс. длина формы обучения */
-#define GRADES     4       /* количество оценок */
+#define MAX_SPEC   50
+#define MAX_NAME   100
+#define MAX_FORM   12
+#define GRADES     4
 
 /* Зоны экрана (в пикселях) */
-#define BTN_Y      10      /* Y кнопок */
-#define BTN_H      36      /* высота кнопок */
-#define SEARCH_Y   55      /* Y строки поиска */
-#define BOX_H      34      /* высота текстовых полей и радио-кнопок */
-#define HEADER_Y   105     /* Y заголовка таблицы */
-#define ROW_Y_START 130    /* Y начала строк таблицы */
-#define ROW_H      22      /* высота одной строки */
-#define TABLE_H    540     /* высота таблицы (от ROW_Y_START до низа) */
+#define BTN_Y      10
+#define BTN_H      36
+#define SEARCH_Y   55
+#define BOX_H      34
+#define HEADER_Y   105
+#define ROW_Y_START 130
+#define ROW_H      22
+#define TABLE_H    540
 
 /* Цвета интерфейса */
 #define BG_COLOR     CLITERAL(Color){ 245, 245, 255, 255 }
@@ -73,12 +73,12 @@
  * ========================================================== */
 
 typedef struct {
-    char  speciality[MAX_SPEC + 1]; /* наименование специальности */
-    int   group;                     /* номер группы */
-    char  full_name[MAX_NAME + 1];  /* ФИО студента */
-    char  form[MAX_FORM + 1];       /* "бюджетная" или "платная" */
-    int   grades[GRADES];           /* оценки (каждая от 1 до 10) */
-    float avg_score;                /* средний балл (вычисляется) */
+    char  speciality[MAX_SPEC + 1];
+    int   group;
+    char  full_name[MAX_NAME + 1];
+    char  form[MAX_FORM + 1];
+    int   grades[GRADES];
+    float avg_score;
 } Student;
 
 /* ==========================================================
@@ -86,61 +86,42 @@ typedef struct {
  * ========================================================== */
 
 typedef enum {
-    VIEW_ALL,             /* исходные данные */
-    VIEW_SORTED,          /* отсортировано по группе / ФИО */
-    VIEW_EXCELLENT_PAID,  /* отличники на платном */
-    VIEW_BY_FORM,         /* списки по форме обучения */
-    VIEW_SEARCH           /* результат поиска */
+    VIEW_ALL,
+    VIEW_SORTED,
+    VIEW_EXCELLENT_PAID,
+    VIEW_BY_FORM,
+    VIEW_SEARCH
 } ViewMode;
 
 /* ==========================================================
  *  ГЛОБАЛЬНЫЕ ПЕРЕМЕННЫЕ
  * ========================================================== */
 
-/* Мастер-массив студентов (не изменяется) */
 static Student g_students[MAX_STUD];
-
-/* Массив указателей на отображаемых студентов + их количество */
 static Student *g_display[MAX_STUD];
 static int g_display_count = 0;
-
-/* Текущий режим просмотра */
 static ViewMode g_view = VIEW_ALL;
-
-/* Прокрутка (в пикселях) */
 static float g_scroll = 0.0f;
 
-/* Поля для поиска */
 static char g_search_name[MAX_NAME + 1] = "";
 static int  g_search_name_len = 0;
 static char g_search_group[8] = "";
 static int  g_search_group_len = 0;
+static int  g_search_form = 0;  /* 0 = все, 1 = бюджет, 2 = плат */
+static int  g_focus = -1;
 
-/* Радио-кнопки формы: 0 = "Все", 1 = "Бюджет", 2 = "Плат" */
-static int g_search_form = 0;
-
-/* Фокус поля ввода: -1 = нет, 0 = ФИО, 1 = группа */
-static int g_focus = -1;
-
-/* Шрифт с кириллицей */
 static Font g_font;
-
-/* Координаты текстовых полей (вычисляются один раз) */
-static int g_tb_name_x = 0, g_tb_name_w = 0;
-static int g_tb_group_x = 0, g_tb_group_w = 0;
 
 /* ==========================================================
  *  ВСПОМОГАТЕЛЬНЫЕ ФУНКЦИИ
  * ========================================================== */
 
-/* Вычисление среднего балла */
 static float calc_avg(const int grades[GRADES]) {
     int sum = 0;
     for (int i = 0; i < GRADES; i++) sum += grades[i];
     return (float)sum / (float)GRADES;
 }
 
-/* Сравнение для сортировки по group, затем по full_name */
 static int cmp_group_name(const void *a, const void *b) {
     const Student *sa = *(const Student **)a;
     const Student *sb = *(const Student **)b;
@@ -148,7 +129,6 @@ static int cmp_group_name(const void *a, const void *b) {
     return stricmp(sa->full_name, sb->full_name);
 }
 
-/* Сравнение по среднему баллу (убывание), при равенстве — по ФИО */
 static int cmp_avg_desc(const void *a, const void *b) {
     const Student *sa = *(const Student **)a;
     const Student *sb = *(const Student **)b;
@@ -157,7 +137,6 @@ static int cmp_avg_desc(const void *a, const void *b) {
     return stricmp(sa->full_name, sb->full_name);
 }
 
-/* Проверка: содержит ли str подстроку substr (без учёта регистра) */
 static int str_icontains(const char *str, const char *substr) {
     if (!*substr) return 1;
     size_t l1 = strlen(str);
@@ -174,7 +153,6 @@ static int str_icontains(const char *str, const char *substr) {
     return 0;
 }
 
-/* Заполнить g_display всеми студентами */
 static void reset_display(void) {
     for (int i = 0; i < MAX_STUD; i++) g_display[i] = &g_students[i];
     g_display_count = MAX_STUD;
@@ -184,7 +162,6 @@ static void reset_display(void) {
  *  ДЕЙСТВИЯ
  * ========================================================== */
 
-/* 1. Сортировка: группировка по group, внутри — по ФИО */
 static void action_sort(void) {
     reset_display();
     qsort(g_display, g_display_count, sizeof(Student *), cmp_group_name);
@@ -192,60 +169,53 @@ static void action_sort(void) {
     g_scroll = 0.0f;
 }
 
-/* 2. Отличники (9-10) + платная форма */
 static void action_excellent_paid(void) {
     g_display_count = 0;
     for (int i = 0; i < MAX_STUD; i++) {
         int excellent = 1;
         for (int k = 0; k < GRADES; k++)
             if (g_students[i].grades[k] < 9) { excellent = 0; break; }
-        if (excellent && strcmp(g_students[i].form, "платная") == 0)
+        if (excellent && strcmp(g_students[i].form, u8"платная") == 0)
             g_display[g_display_count++] = &g_students[i];
     }
     g_view = VIEW_EXCELLENT_PAID;
     g_scroll = 0.0f;
 }
 
-/* 3. Списки по форме обучения, убывание среднего балла */
 static void action_by_form(void) {
     Student *budget[MAX_STUD], *paid[MAX_STUD];
     int bc = 0, pc = 0;
     for (int i = 0; i < MAX_STUD; i++) {
-        if (strcmp(g_students[i].form, "бюджетная") == 0)
+        if (strcmp(g_students[i].form, u8"бюджетная") == 0)
             budget[bc++] = &g_students[i];
         else
             paid[pc++] = &g_students[i];
     }
     qsort(budget, bc, sizeof(Student *), cmp_avg_desc);
     qsort(paid, pc, sizeof(Student *), cmp_avg_desc);
-
     g_display_count = 0;
     for (int i = 0; i < bc; i++) g_display[g_display_count++] = budget[i];
     for (int i = 0; i < pc; i++) g_display[g_display_count++] = paid[i];
-
     g_view = VIEW_BY_FORM;
     g_scroll = 0.0f;
 }
 
-/* 4. Поиск: комбинированный фильтр */
 static void action_search(void) {
     g_display_count = 0;
     int grp = (g_search_group_len > 0) ? atoi(g_search_group) : 0;
-
     for (int i = 0; i < MAX_STUD; i++) {
         const Student *s = &g_students[i];
         if (g_search_name_len > 0 && !str_icontains(s->full_name, g_search_name))
             continue;
         if (grp > 0 && s->group != grp) continue;
-        if (g_search_form == 1 && strcmp(s->form, "бюджетная") != 0) continue;
-        if (g_search_form == 2 && strcmp(s->form, "платная") != 0) continue;
+        if (g_search_form == 1 && strcmp(s->form, u8"бюджетная") != 0) continue;
+        if (g_search_form == 2 && strcmp(s->form, u8"платная") != 0) continue;
         g_display[g_display_count++] = &g_students[i];
     }
     g_view = VIEW_SEARCH;
     g_scroll = 0.0f;
 }
 
-/* Сброс к исходному виду */
 static void action_reset(void) {
     reset_display();
     g_view = VIEW_ALL;
@@ -265,18 +235,17 @@ static void fill_sample_data(void) {
         const char *spec; int grp; const char *name; const char *form;
         int g1, g2, g3, g4;
     } data[MAX_STUD] = {
-        { "Программная инженерия", 101, "Петров Алексей Иванович",     "бюджетная", 9, 8, 7, 9 },
-        { "Программная инженерия", 101, "Сидоров Борис Владимирович",  "платная",   10, 9, 10, 9 },
-        { "Программная инженерия", 101, "Иванова Вера Константиновна", "бюджетная", 6, 7, 5, 8 },
-        { "Прикладная математика", 102, "Смирнов Глеб Дмитриевич",     "платная",   9, 9, 10, 10 },
-        { "Прикладная математика", 102, "Козлова Дарья Евгеньевна",    "бюджетная", 8, 8, 9, 7 },
-        { "Прикладная математика", 102, "Новиков Евгений Жорович",     "платная",   4, 5, 6, 5 },
-        { "Информационные системы", 201, "Попова Жанна Зиновьевна",    "бюджетная", 10, 10, 9, 10 },
-        { "Информационные системы", 201, "Васильев Илья Игоревич",     "платная",   7, 6, 8, 7 },
-        { "Информационные системы", 201, "Морозов Кирилл Леонидович",  "бюджетная", 5, 6, 4, 7 },
-        { "Информационные системы", 201, "Фёдорова Лидия Михайловна",  "платная",   10, 9, 9, 10 },
+        { u8"Программная инженерия", 101, u8"Петров Алексей Иванович",    u8"бюджетная", 9, 8, 7, 9 },
+        { u8"Программная инженерия", 101, u8"Сидоров Борис Владимирович", u8"платная",   10, 9, 10, 9 },
+        { u8"Программная инженерия", 101, u8"Иванова Вера Константиновна",u8"бюджетная", 6, 7, 5, 8 },
+        { u8"Прикладная математика", 102, u8"Смирнов Глеб Дмитриевич",    u8"платная",   9, 9, 10, 10 },
+        { u8"Прикладная математика", 102, u8"Козлова Дарья Евгеньевна",   u8"бюджетная", 8, 8, 9, 7 },
+        { u8"Прикладная математика", 102, u8"Новиков Евгений Жорович",    u8"платная",   4, 5, 6, 5 },
+        { u8"Информационные системы", 201, u8"Попова Жанна Зиновьевна",   u8"бюджетная", 10, 10, 9, 10 },
+        { u8"Информационные системы", 201, u8"Васильев Илья Игоревич",    u8"платная",   7, 6, 8, 7 },
+        { u8"Информационные системы", 201, u8"Морозов Кирилл Леонидович", u8"бюджетная", 5, 6, 4, 7 },
+        { u8"Информационные системы", 201, u8"Фёдорова Лидия Михайловна", u8"платная",   10, 9, 9, 10 },
     };
-
     for (int i = 0; i < MAX_STUD; i++) {
         strcpy(g_students[i].speciality, data[i].spec);
         g_students[i].group = data[i].grp;
@@ -291,10 +260,9 @@ static void fill_sample_data(void) {
 }
 
 /* ==========================================================
- *  ОТРИСОВКА ЭЛЕМЕНТОВ ИНТЕРФЕЙСА
+ *  ОТРИСОВКА ЭЛЕМЕНТОВ
  * ========================================================== */
 
-/* Кнопка. Возвращает 1, если нажата в этом кадре. */
 static int btn(int x, int y, int w, int h, const char *text,
                Color col, Color hover) {
     Rectangle r = { (float)x, (float)y, (float)w, (float)h };
@@ -309,24 +277,19 @@ static int btn(int x, int y, int w, int h, const char *text,
     return CheckCollisionPointRec(m, r) && IsMouseButtonPressed(MOUSE_LEFT_BUTTON);
 }
 
-/* Поле ввода с подписью. Возвращает 1, если кликнули. */
 static int textbox(int x, int y, int w, int h, const char *label,
                    const char *buf, int focused) {
     Vector2 ls = MeasureTextEx(g_font, label, 14, 1);
     int lw = (int)ls.x + 6;
-    /* подпись */
     DrawTextEx(g_font, label, (Vector2){ (float)x, y + (h - 14)/2 },
                14, 1, LABEL_COLOR);
-    /* рамка поля */
     Rectangle r = { (float)(x + lw), (float)y, (float)(w - lw), (float)h };
     DrawRectangleRec(r, INPUT_BG);
     DrawRectangleLinesEx(r, focused ? 2 : 1, focused ? FOCUS_BORDER : INPUT_BORDER);
-    /* текст с обрезанием */
     const char *display = buf;
     char truncated[128];
     Vector2 ts = MeasureTextEx(g_font, display, 14, 1);
     if (ts.x > r.width - 8) {
-        /* урезаем слева, чтобы показать конец */
         int len = (int)strlen(display);
         int start = len;
         while (start > 0) {
@@ -340,7 +303,6 @@ static int textbox(int x, int y, int w, int h, const char *label,
     }
     DrawTextEx(g_font, display,
                (Vector2){ r.x + 4, y + (h - 14)/2 }, 14, 1, TEXT_COLOR);
-    /* курсор */
     if (focused && ((int)(GetTime() * 2) % 2 == 0)) {
         float cx = r.x + 4 + ts.x;
         DrawLineV((Vector2){ cx, r.y + 4 }, (Vector2){ cx, r.y + h - 4 },
@@ -350,7 +312,6 @@ static int textbox(int x, int y, int w, int h, const char *label,
            IsMouseButtonPressed(MOUSE_LEFT_BUTTON);
 }
 
-/* Группа радио-кнопок. Возвращает новый выбранный индекс. */
 static int radio_group(int x, int y, int h, const char *items[],
                        int count, int selected) {
     int cx = x;
@@ -377,72 +338,66 @@ static int radio_group(int x, int y, int h, const char *items[],
 static const int COL_X[] = { 10, 45, 115, 410, 650, 770, 900 };
 static const int COL_W[] = { 35, 70, 295, 240, 120, 130, 300 };
 
-/* Обрезать текст по ширине колонки, добавить ... если не влезает */
-static void draw_col_text(int col, int y, int font_size, const char *text, Color color) {
-    Vector2 sz = MeasureTextEx(g_font, text, font_size, 1);
+/* Обрезать текст по ширине колонки */
+static void draw_col_text(int col, int y, int font_sz, const char *text, Color color) {
+    Vector2 sz = MeasureTextEx(g_font, text, font_sz, 1);
     int max_w = COL_W[col] - 6;
     if (sz.x <= max_w) {
-        DrawTextEx(g_font, text, (Vector2){ (float)COL_X[col], y }, font_size, 1, color);
+        DrawTextEx(g_font, text, (Vector2){ (float)COL_X[col], y }, font_sz, 1, color);
         return;
     }
-    /* Обрезаем, пока не влезет с "..." */
     char buf[128];
     int byte_len = (int)strlen(text);
     while (byte_len > 0) {
-        /* Отступаем на один UTF-8 символ с конца */
         int cut = byte_len - 1;
         while (cut > 0 && ((unsigned char)text[cut] & 0xC0) == 0x80) cut--;
         memcpy(buf, text, cut);
         buf[cut] = '\0';
-        strcat(buf, "...");
-        Vector2 ts = MeasureTextEx(g_font, buf, font_size, 1);
+        strcat(buf, u8"...");
+        Vector2 ts = MeasureTextEx(g_font, buf, font_sz, 1);
         if (ts.x <= max_w) {
-            DrawTextEx(g_font, buf, (Vector2){ (float)COL_X[col], y }, font_size, 1, color);
+            DrawTextEx(g_font, buf, (Vector2){ (float)COL_X[col], y }, font_sz, 1, color);
             return;
         }
         byte_len = cut;
     }
 }
 
-/* Заголовок таблицы (фиксированный, не скроллится) */
+/* Заголовок таблицы */
 static void draw_header(void) {
     DrawRectangle(0, HEADER_Y, SCREEN_W, ROW_H, HEADER_BG);
-    const char *titles[] = { "#", "Группа", "ФИО", "Специальность",
-                             "Форма", "Оценки", "Ср. балл" };
-    for (int i = 0; i < 7; i++) {
-        Vector2 sz = MeasureTextEx(g_font, titles[i], 16, 1);
-        float tx = COL_X[i] + (COL_W[i] - sz.x) / 2;
+    const char *titles[] = {
+        u8"#", u8"Группа", u8"ФИО", u8"Специальность",
+        u8"Форма", u8"Оценки", u8"Ср. балл"
+    };
+    for (int i = 0; i < 7; i++)
         DrawTextEx(g_font, titles[i],
-                   (Vector2){ tx, HEADER_Y + (ROW_H - 16)/2 },
+                   (Vector2){ (float)COL_X[i], HEADER_Y + (ROW_H - 16)/2 },
                    16, 1, HEADER_TEXT);
-    }
 }
 
 /* Одна строка таблицы */
 static void draw_row(int idx, int y, const Student *s) {
     DrawRectangle(0, y, SCREEN_W, ROW_H, (idx % 2 == 0) ? ROW_EVEN : ROW_ODD);
-
-    char buf[7][64];
-    snprintf(buf[0], sizeof(buf[0]), "%d", idx + 1);
-    snprintf(buf[1], sizeof(buf[1]), "%d", s->group);
-    strcpy(buf[2], s->full_name);
-    strcpy(buf[3], s->speciality);
-    strcpy(buf[4], s->form);
-    snprintf(buf[5], sizeof(buf[5]), "%d %d %d %d",
+    char b[7][64];
+    snprintf(b[0], sizeof(b[0]), u8"%d", idx + 1);
+    snprintf(b[1], sizeof(b[1]), u8"%d", s->group);
+    strcpy(b[2], s->full_name);
+    strcpy(b[3], s->speciality);
+    strcpy(b[4], s->form);
+    snprintf(b[5], sizeof(b[5]), u8"%d %d %d %d",
              s->grades[0], s->grades[1], s->grades[2], s->grades[3]);
-    snprintf(buf[6], sizeof(buf[6]), "%.2f", s->avg_score);
-
-    Color colors[] = {
+    snprintf(b[6], sizeof(b[6]), u8"%.2f", s->avg_score);
+    Color cc[] = {
         TEXT_COLOR, TEXT_COLOR, TEXT_COLOR, TEXT_COLOR,
-        (strcmp(s->form, "бюджетная") == 0) ? TITLE_BUDGET : TITLE_PAID,
+        (strcmp(s->form, u8"бюджетная") == 0) ? TITLE_BUDGET : TITLE_PAID,
         TEXT_COLOR, TEXT_COLOR
     };
-
     for (int i = 0; i < 7; i++)
-        draw_col_text(i, y + (ROW_H - 14) / 2, 14, buf[i], colors[i]);
+        draw_col_text(i, y + (ROW_H - 14) / 2, 14, b[i], cc[i]);
 }
 
-/* Отрисовка полоски-заголовка для секции (бюджет / плат) */
+/* Полоска-заголовок секции (бюджет / плат) */
 static void draw_section(int y, const char *title, Color bg) {
     DrawRectangle(0, y, SCREEN_W, ROW_H, bg);
     Vector2 sz = MeasureTextEx(g_font, title, 15, 1);
@@ -451,23 +406,19 @@ static void draw_section(int y, const char *title, Color bg) {
                15, 1, (Color){ 255, 255, 255, 255 });
 }
 
-/* Основная таблица: заголовок + скроллируемые строки */
+/* Основная таблица с прокруткой */
 static void draw_table(void) {
     draw_header();
     BeginScissorMode(0, ROW_Y_START, SCREEN_W, TABLE_H);
-
     int y = ROW_Y_START - (int)g_scroll;
     int ri = 0;
 
     if (g_view == VIEW_BY_FORM) {
-        /* Ищем границу: все бюджетные идут перед платными */
         int split = 0;
         for (int i = 0; i < g_display_count; i++)
-            if (strcmp(g_display[i]->form, "платная") == 0) { split = i; break; }
-
-        /* Бюджетная секция */
+            if (strcmp(g_display[i]->form, u8"платная") == 0) { split = i; break; }
         if (split > 0) {
-            draw_section(y, "--- БЮДЖЕТНАЯ ФОРМА ---", TITLE_BUDGET);
+            draw_section(y, u8"--- БЮДЖЕТНАЯ ФОРМА ---", TITLE_BUDGET);
             y += ROW_H; ri++;
         }
         for (int i = 0; i < split; i++) {
@@ -475,10 +426,8 @@ static void draw_table(void) {
                 draw_row(ri, y, g_display[i]);
             y += ROW_H; ri++;
         }
-
-        /* Платная секция */
         if (split < g_display_count) {
-            draw_section(y, "--- ПЛАТНАЯ ФОРМА ---", TITLE_PAID);
+            draw_section(y, u8"--- ПЛАТНАЯ ФОРМА ---", TITLE_PAID);
             y += ROW_H; ri++;
         }
         for (int i = split; i < g_display_count; i++) {
@@ -493,15 +442,13 @@ static void draw_table(void) {
             y += ROW_H; ri++;
         }
     }
-
     EndScissorMode();
 }
 
 /* ==========================================================
- *  ОБРАБОТКА ВВОДА ТЕКСТА
+ *  ОБРАБОТКА ВВОДА
  * ========================================================== */
 
-/* Добавить один Unicode-символ в UTF-8 строку */
 static void utf8_append(char *buf, int *len, int max, int codepoint) {
     if (codepoint < 0x80) {
         if (*len + 1 > max) return;
@@ -519,25 +466,21 @@ static void utf8_append(char *buf, int *len, int max, int codepoint) {
     buf[*len] = '\0';
 }
 
-/* Удалить последний UTF-8 символ */
 static void utf8_pop(char *buf, int *len) {
     if (*len <= 0) return;
     int i = *len - 1;
-    /* Идём назад, пока не найдём стартовый байт UTF-8 */
     while (i > 0 && ((unsigned char)buf[i] & 0xC0) == 0x80) i--;
     *len = i;
     buf[*len] = '\0';
 }
 
-/* Обработка нажатий клавиш в полях ввода */
 static void handle_keys(void) {
     if (g_focus < 0) return;
-
     int c = GetCharPressed();
     while (c > 0) {
         int printable = (c >= 32 && c <= 126) ||
-                        (c >= 0x400 && c <= 0x4FF) || /* кириллица */
-                        (c >= 0x500 && c <= 0x52F);   /* дополнения */
+                        (c >= 0x400 && c <= 0x4FF) ||
+                        (c >= 0x500 && c <= 0x52F);
         if (printable) {
             if (g_focus == 0)
                 utf8_append(g_search_name, &g_search_name_len, MAX_NAME, c);
@@ -546,27 +489,10 @@ static void handle_keys(void) {
         }
         c = GetCharPressed();
     }
-
     if (IsKeyPressed(KEY_BACKSPACE)) {
         if (g_focus == 0) utf8_pop(g_search_name, &g_search_name_len);
         else if (g_focus == 1) utf8_pop(g_search_group, &g_search_group_len);
     }
-}
-
-/* ==========================================================
- *  ВЫЧИСЛЕНИЕ ПОЛОЖЕНИЙ ПОЛЕЙ ВВОДА
- * ========================================================== */
-
-static void calc_textbox_positions(void) {
-    /* Поле ФИО: от x=10 */
-    int l1 = (int)MeasureTextEx(g_font, "ФИО:", 14, 1).x + 6;
-    g_tb_name_x = 10 + l1;
-    g_tb_name_w = 300;
-
-    /* Поле Группа: от x = 10 + 300 + 20 = 330 */
-    int l2 = (int)MeasureTextEx(g_font, "Группа:", 14, 1).x + 6;
-    g_tb_group_x = 330 + l2;
-    g_tb_group_w = 100;
 }
 
 /* ==========================================================
@@ -575,36 +501,58 @@ static void calc_textbox_positions(void) {
 
 int main(void) {
     SetConfigFlags(FLAG_MSAA_4X_HINT);
-    InitWindow(SCREEN_W, SCREEN_H,
-               "Ведомость об успеваемости студентов");
+    InitWindow(SCREEN_W, SCREEN_H, u8"Ведомость об успеваемости студентов");
     SetTargetFPS(60);
 
     /* Загружаем шрифт с кириллицей */
     {
         int codepoints[192], cp_count = 0;
-        /* ASCII печатные символы (32-126) */
         for (int i = 32; i < 127; i++) codepoints[cp_count++] = i;
-        /* Русские буквы А-Я (0x0410-0x042F), а-я (0x0430-0x044F) */
         for (int i = 0x0410; i <= 0x044F; i++) codepoints[cp_count++] = i;
-        /* Ё (0x0401) и ё (0x0451) */
         codepoints[cp_count++] = 0x0401;
         codepoints[cp_count++] = 0x0451;
-        /* Пробуем загрузить Arial, если нет — встроенный шрифт */
-        g_font = LoadFontEx("C:/Windows/Fonts/arial.ttf", 32, codepoints, cp_count);
-        if (g_font.texture.id == 0) {
-            /* Запасной вариант: маленький встроенный шрифт (без кириллицы) */
+
+        /* Загружаем через LoadFontData + GenTextureFontAtlas с заведомо большим атласом */
+        GlyphData *glyphs = LoadFontData(u8"C:/Windows/Fonts/arial.ttf", 24,
+                                          codepoints, cp_count, FONT_DEFAULT);
+        if (glyphs != NULL) {
+            int w = 1024, h = 1024;
+            Rectangle *recs = NULL;
+            Image atlas = GenTextureFontAtlas(glyphs, &recs, w, h, 24, 4);
+
+            g_font.texture = LoadTextureFromImage(atlas);
+            UnloadImage(atlas);
+
+            g_font.baseSize = 24;
+            g_font.glyphCount = cp_count;
+            g_font.glyphPadding = 4;
+
+            g_font.recs = (Rectangle *)RL_MALLOC(cp_count * sizeof(Rectangle));
+            g_font.glyphs = (GlyphInfo *)RL_CALLOC(cp_count, sizeof(GlyphInfo));
+            for (int i = 0; i < cp_count; i++) {
+                g_font.recs[i] = recs[i];
+                g_font.glyphs[i].value = codepoints[i];
+                g_font.glyphs[i].offsetX = glyphs[i].offsetX;
+                g_font.glyphs[i].offsetY = glyphs[i].offsetY;
+                g_font.glyphs[i].advanceX = glyphs[i].advanceX;
+            }
+
+            RL_FREE(recs);
+            UnloadFontData(glyphs, cp_count);
+
+            /* Устанавливаем фильтр текстуры для чёткого рендеринга */
+            SetTextureFilter(g_font.texture, TEXTURE_FILTER_BILINEAR);
+        } else {
             g_font = GetFontDefault();
         }
     }
 
-    calc_textbox_positions();
     fill_sample_data();
     reset_display();
     g_view = VIEW_ALL;
 
     while (!WindowShouldClose()) {
-        /* ---- Ввод ---- */
-
+        /* Ввод */
         handle_keys();
 
         float wheel = GetMouseWheelMove();
@@ -617,68 +565,56 @@ int main(void) {
             if (g_scroll > max_scroll) g_scroll = (float)max_scroll;
         }
 
-        /* ---- Определяем клик по полям ввода (до отрисовки) ---- */
-
         if (IsMouseButtonPressed(MOUSE_LEFT_BUTTON)) {
             Vector2 m = GetMousePosition();
+            int l1 = (int)MeasureTextEx(g_font, u8"ФИО:", 14, 1).x + 6;
+            int l2 = (int)MeasureTextEx(g_font, u8"Группа:", 14, 1).x + 6;
+            int nx = 10 + l1, nw = 300;
+            int gx = 330 + l2, gw = 100;
             g_focus = -1;
-            Rectangle rn = { (float)g_tb_name_x, (float)SEARCH_Y,
-                             (float)g_tb_name_w, (float)BOX_H };
-            Rectangle rg = { (float)g_tb_group_x, (float)SEARCH_Y,
-                             (float)g_tb_group_w, (float)BOX_H };
-            if (CheckCollisionPointRec(m, rn)) g_focus = 0;
-            else if (CheckCollisionPointRec(m, rg)) g_focus = 1;
+            if (CheckCollisionPointRec(m, (Rectangle){ (float)nx, SEARCH_Y, (float)nw, BOX_H })) g_focus = 0;
+            else if (CheckCollisionPointRec(m, (Rectangle){ (float)gx, SEARCH_Y, (float)gw, BOX_H })) g_focus = 1;
         }
 
-        /* ---- Действия по кнопкам ---- */
-
-        /* Строка 1: кнопки-действия */
-        if (btn(10,   BTN_Y, 210, BTN_H, "Сортировка по группам/ФИО", BTN_COLOR, BTN_HOVER))
+        /* Кнопки */
+        if (btn(10,  BTN_Y, 210, BTN_H, u8"Сортировка по группам/ФИО", BTN_COLOR, BTN_HOVER))
             action_sort();
-        if (btn(230,  BTN_Y, 200, BTN_H, "Отличники (платные)", BTN_COLOR, BTN_HOVER))
+        if (btn(230, BTN_Y, 200, BTN_H, u8"Отличники (платные)", BTN_COLOR, BTN_HOVER))
             action_excellent_paid();
-        if (btn(440,  BTN_Y, 230, BTN_H, "Списки по форме обучения", BTN_COLOR, BTN_HOVER))
+        if (btn(440, BTN_Y, 230, BTN_H, u8"Списки по форме обучения", BTN_COLOR, BTN_HOVER))
             action_by_form();
-        if (btn(680,  BTN_Y, 100, BTN_H, "Поиск", BTN_COLOR, BTN_HOVER)) { }
+        btn(680, BTN_Y, 100, BTN_H, u8"Поиск", BTN_COLOR, BTN_HOVER);
 
-        /* Строка 2: поля поиска */
-        textbox(10,   SEARCH_Y, 310, BOX_H, "ФИО:",
-                g_search_name, g_focus == 0);
-        textbox(330,  SEARCH_Y, 155, BOX_H, "Группа:",
-                g_search_group, g_focus == 1);
+        textbox(10,  SEARCH_Y, 310, BOX_H, u8"ФИО:", g_search_name, g_focus == 0);
+        textbox(330, SEARCH_Y, 155, BOX_H, u8"Группа:", g_search_group, g_focus == 1);
 
-        const char *form_items[] = { "Все", "Бюджет", "Плат" };
-        g_search_form = radio_group(510, SEARCH_Y, BOX_H,
-                                     form_items, 3, g_search_form);
+        const char *form_items[] = { u8"Все", u8"Бюджет", u8"Плат" };
+        g_search_form = radio_group(510, SEARCH_Y, BOX_H, form_items, 3, g_search_form);
 
-        if (btn(700,  SEARCH_Y, 90, BOX_H, "Найти",
+        if (btn(700, SEARCH_Y, 90, BOX_H, u8"Найти",
                 (Color){ 50, 160, 50, 255 }, (Color){ 70, 200, 70, 255 }))
             action_search();
-        if (btn(800,  SEARCH_Y, 90, BOX_H, "Сброс",
+        if (btn(800, SEARCH_Y, 90, BOX_H, u8"Сброс",
                 (Color){ 160, 60, 60, 255 }, (Color){ 200, 80, 80, 255 }))
             action_reset();
 
-        /* ---- Отрисовка ---- */
-
+        /* Отрисовка */
         BeginDrawing();
         ClearBackground(BG_COLOR);
-
         draw_table();
 
-        /* Информационная строка внизу */
-        const char *mode = "";
+        const char *mode = u8"";
         switch (g_view) {
-            case VIEW_ALL:            mode = "Все студенты"; break;
-            case VIEW_SORTED:         mode = "Сортировка по группам и ФИО"; break;
-            case VIEW_EXCELLENT_PAID: mode = "Отличники (платная форма)"; break;
-            case VIEW_BY_FORM:        mode = "Списки по форме обучения"; break;
-            case VIEW_SEARCH:         mode = "Результат поиска"; break;
+            case VIEW_ALL:            mode = u8"Все студенты"; break;
+            case VIEW_SORTED:         mode = u8"Сортировка по группам и ФИО"; break;
+            case VIEW_EXCELLENT_PAID: mode = u8"Отличники (платная форма)"; break;
+            case VIEW_BY_FORM:        mode = u8"Списки по форме обучения"; break;
+            case VIEW_SEARCH:         mode = u8"Результат поиска"; break;
         }
         char info[128];
-        snprintf(info, sizeof(info), "Режим: %s  |  Показано: %d из %d",
+        snprintf(info, sizeof(info), u8"Режим: %s  |  Показано: %d из %d",
                  mode, g_display_count, MAX_STUD);
         DrawTextEx(g_font, info, (Vector2){ 10, SCREEN_H - 22 }, 14, 1, LABEL_COLOR);
-
         EndDrawing();
     }
 
