@@ -53,13 +53,15 @@
 /* Зоны экрана (в пикселях) */
 #define BTN_Y       10
 #define BTN_H       36
-#define INPUT_Y     55
+#define PANEL_Y     55
+#define PANEL_H     82
+#define INPUT_Y     (PANEL_Y + 6)
 #define INPUT_H     34
-#define SEARCH_Y    105
+#define SEARCH_Y    (INPUT_Y + INPUT_H + 8)
 #define BOX_H       34
-#define HEADER_Y    150
+#define HEADER_Y    (PANEL_Y + PANEL_H + 6)
 #define ROW_H       22
-#define ROW_Y_START 175
+#define ROW_Y_START (HEADER_Y + ROW_H + 2)
 #define TABLE_H     (SCREEN_H - ROW_Y_START - 28)
 
 /* Цвета интерфейса */
@@ -832,8 +834,8 @@ static int radio_group(int x, int y, int h, const char *items[],
 }
 
 /* Позиции колонок таблицы */
-static const int COL_X[] = { 10, 45, 115, 410, 650, 800, 940 };
-static const int COL_W[] = { 35, 70, 295, 240, 150, 140, 260 };
+static const int COL_X[] = { 10, 45, 115, 410, 690, 840, 970 };
+static const int COL_W[] = { 35, 70, 295, 280, 150, 130, 230 };
 
 /*
  *  draw_col_text – рисует текст в колонке таблицы.
@@ -1088,10 +1090,8 @@ int main(void) {
     rebuild_display();
 
     while (!WindowShouldClose()) {
-        /* Ввод */
         handle_keys();
 
-        /* Колесо прокрутки */
         float wheel = GetMouseWheelMove();
         if (wheel != 0.0f) {
             int extra = (g_view == VIEW_BY_FORM) ? 2 : 0;
@@ -1106,53 +1106,54 @@ int main(void) {
         if (IsMouseButtonPressed(MOUSE_LEFT_BUTTON)) {
             Vector2 m = GetMousePosition();
 
-            /* Проверка кликов по полям ввода (INPUT_Y) */
-            /* Специальность: x=10, w=220 */
-            int inp_x[] = { 10, 240, 350, 610, 760, 820, 880, 940 };
-            int inp_w[] = { 220, 100, 250, 140, 50, 50, 50, 50 };
+            /* Поля редактирования (8 шт.) */
+            int inp_x[] = { 10, 260, 380, 670, 840, 900, 960, 1020 };
+            int inp_w[] = { 240, 110, 280, 160, 55, 55, 55, 55 };
             g_focus = -1;
             for (int i = 0; i < 8; i++) {
                 Rectangle r = { (float)inp_x[i], INPUT_Y, (float)inp_w[i], INPUT_H };
                 if (CheckCollisionPointRec(m, r)) { g_focus = i; break; }
             }
 
-            /* Проверка кликов по полям поиска (SEARCH_Y) */
+            /* Поля поиска */
             if (g_focus < 0) {
-                int l1 = (int)MeasureTextEx(g_font, "ФИО:", 14, 1).x + 6;
-                int l2 = (int)MeasureTextEx(g_font, "Группа:", 14, 1).x + 6;
-                int nx = 10 + l1, nw = 250;
-                int gx = 270 + l2, gw = 80;
-                if (CheckCollisionPointRec(m, (Rectangle){ (float)nx, SEARCH_Y,
-                                            (float)nw, BOX_H })) g_focus = 8;
-                else if (CheckCollisionPointRec(m, (Rectangle){ (float)gx, SEARCH_Y,
-                                                 (float)gw, BOX_H })) g_focus = 9;
+                Rectangle r1 = { 10, SEARCH_Y, 240, BOX_H };
+                Rectangle r2 = { 260, SEARCH_Y, 100, BOX_H };
+                if (CheckCollisionPointRec(m, r1)) g_focus = 8;
+                else if (CheckCollisionPointRec(m, r2)) g_focus = 9;
             }
 
-            /* Проверка клика по строке таблицы */
+            /* Клик по строке таблицы */
             if (g_focus < 0) {
                 int ri = get_row_at_click((int)m.y);
                 if (ri >= 0 && ri < g_display_count) {
                     g_selected_idx = ri;
                     fill_input_from_student(g_display[ri]);
-                } else if (m.y < HEADER_Y) {
-                    /* клик по кнопкам — ничего не делаем */
                 }
             }
 
-            /* Щелчок в пустую область — снять выделение */
+            /* Отмена выделения при клике в пустую область таблицы */
             if (g_focus < 0 && m.y >= ROW_Y_START && m.y < ROW_Y_START + TABLE_H) {
                 int ri = get_row_at_click((int)m.y);
-                if (ri < 0 || ri >= g_display_count) {
-                    g_selected_idx = -1;
-                }
+                if (ri < 0 || ri >= g_display_count) g_selected_idx = -1;
             }
         }
 
         /* ====================================================
-         *  КНОПКИ ДЕЙСТВИЙ
+         *  ОТРИСОВКА
          * ==================================================== */
 
-        /* Строка кнопок */
+        BeginDrawing();
+        ClearBackground(BG_COLOR);
+
+        /* Фон единой панели ввода-поиска */
+        {
+            Rectangle pr = { 8, (float)PANEL_Y, SCREEN_W - 16, PANEL_H };
+            DrawRectangleRounded(pr, 0.08f, 6, (Color){ 235, 235, 250, 255 });
+            DrawRectangleRoundedLines(pr, 0.08f, 6, (Color){ 200, 200, 225, 255 });
+        }
+
+        /* Кнопки действий */
         if (btn(10,   BTN_Y, 100, BTN_H, "Добавить",  BTN_ADD, BTN_ADD_HOVER))
             action_add();
         if (btn(120,  BTN_Y, 100, BTN_H, "Изменить",  BTN_COLOR, BTN_HOVER))
@@ -1170,50 +1171,38 @@ int main(void) {
         if (btn(740,  BTN_Y, 100, BTN_H, "Загрузить", BTN_SAVE, BTN_SAVE_HOVER))
             { listClear(&g_list); loadDbCsv(CSV_FILE, &g_list); rebuild_display(); clear_input_fields(); g_selected_idx = -1; }
 
-        /* ====================================================
-         *  ПОЛЯ ВВОДА (редактирование)
-         * ==================================================== */
-
-        textbox(10,  INPUT_Y, 220, INPUT_H, "Спец.:", g_inp_spec, g_focus == 0);
-        textbox(240, INPUT_Y, 100, INPUT_H, "Груп.:", g_inp_group, g_focus == 1);
-        textbox(350, INPUT_Y, 250, INPUT_H, "ФИО:",   g_inp_name,  g_focus == 2);
-        textbox(610, INPUT_Y, 140, INPUT_H, "Форма:", g_inp_form,  g_focus == 3);
+        /* Поля редактирования */
+        textbox(10,  INPUT_Y, 240, INPUT_H, "Спец.:", g_inp_spec, g_focus == 0);
+        textbox(260, INPUT_Y, 110, INPUT_H, "Груп.:", g_inp_group, g_focus == 1);
+        textbox(380, INPUT_Y, 280, INPUT_H, "ФИО:",   g_inp_name,  g_focus == 2);
+        textbox(670, INPUT_Y, 160, INPUT_H, "Форма:", g_inp_form,  g_focus == 3);
 
         const char *grade_labels[] = { "1:", "2:", "3:", "4:" };
-        int gx = 760;
+        int gx = 840;
         for (int i = 0; i < GRADES; i++) {
-            textbox(gx, INPUT_Y, 50, INPUT_H, grade_labels[i],
+            textbox(gx, INPUT_Y, 55, INPUT_H, grade_labels[i],
                     g_inp_grades[i], g_focus == 4 + i);
             gx += 60;
         }
 
-        /* ====================================================
-         *  СТРОКА ПОИСКА
-         * ==================================================== */
-
-        textbox(10,  SEARCH_Y, 260, BOX_H, "ФИО:",    g_search_name,  g_focus == 8);
-        textbox(280, SEARCH_Y, 130, BOX_H, "Группа:", g_search_group, g_focus == 9);
+        /* Строка поиска */
+        textbox(10,  SEARCH_Y, 240, BOX_H, "Поиск ФИО:", g_search_name,  g_focus == 8);
+        textbox(260, SEARCH_Y, 100, BOX_H, "Груп.:",     g_search_group, g_focus == 9);
 
         const char *form_items[] = { "Все", "Бюджет", "Плат" };
         {
             int old_form = g_search_form;
-            g_search_form = radio_group(430, SEARCH_Y, BOX_H, form_items, 3, g_search_form);
+            g_search_form = radio_group(390, SEARCH_Y, BOX_H, form_items, 3, g_search_form);
             if (g_search_form != old_form) action_search();
         }
 
-        if (btn(640, SEARCH_Y, 80, BOX_H, "Найти",
+        if (btn(560, SEARCH_Y, 80, BOX_H, "Найти",
                 (Color){ 50, 160, 50, 255 }, (Color){ 70, 200, 70, 255 }))
             action_search();
-        if (btn(730, SEARCH_Y, 80, BOX_H, "Сброс",
+        if (btn(650, SEARCH_Y, 80, BOX_H, "Сброс",
                 (Color){ 160, 60, 60, 255 }, (Color){ 200, 80, 80, 255 }))
             action_reset();
 
-        /* ====================================================
-         *  ОТРИСОВКА
-         * ==================================================== */
-
-        BeginDrawing();
-        ClearBackground(BG_COLOR);
         draw_table();
 
         /* Строка состояния */
@@ -1235,7 +1224,6 @@ int main(void) {
         double elapsed = GetTime() - g_status_time;
         if (elapsed < 4.0 && g_status[0]) {
             Color sc = (strncmp(g_status, "Ошибка", 6) == 0) ? STATUS_ERR : STATUS_OK;
-            /* затухание */
             if (elapsed > 3.0) sc.a = (unsigned char)(255 - (int)((elapsed - 3.0) * 255));
             Vector2 sz = MeasureTextEx(g_font, g_status, 14, 1);
             DrawTextEx(g_font, g_status,
