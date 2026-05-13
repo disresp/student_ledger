@@ -54,12 +54,11 @@
 #define BTN_Y       10
 #define BTN_H       36
 #define PANEL_Y     55
-#define PANEL_H     82
+#define PANEL_H     52
 #define INPUT_Y     (PANEL_Y + 6)
 #define INPUT_H     34
-#define SEARCH_Y    (INPUT_Y + INPUT_H + 8)
-#define BOX_H       34
-#define HEADER_Y    (PANEL_Y + PANEL_H + 6)
+
+#define HEADER_Y    (PANEL_Y + PANEL_H + 8)
 #define ROW_H       22
 #define ROW_Y_START (HEADER_Y + ROW_H + 2)
 #define TABLE_H     (SCREEN_H - ROW_Y_START - 28)
@@ -91,6 +90,10 @@
 #define TITLE_PAID      CLITERAL(Color){ 200,  80,  30, 255 }
 #define STATUS_OK       CLITERAL(Color){   0, 130,  50, 255 }
 #define STATUS_ERR      CLITERAL(Color){ 200,  30,  30, 255 }
+#define BTN_CLEAR       CLITERAL(Color){ 190, 150,  40, 255 }
+#define BTN_CLEAR_HOVER CLITERAL(Color){ 220, 180,  60, 255 }
+#define BTN_UNDO        CLITERAL(Color){ 130,  90, 170, 255 }
+#define BTN_UNDO_HOVER  CLITERAL(Color){ 160, 120, 200, 255 }
 
 /* ==========================================================
  *  СТРУКТУРЫ
@@ -132,7 +135,7 @@ typedef enum {
     VIEW_SORTED,         /* сортировка по группе и ФИО */
     VIEW_EXCELLENT_PAID, /* отличники на платной форме */
     VIEW_BY_FORM,        /* списки по форме обучения */
-    VIEW_SEARCH          /* результат поиска */
+
 } ViewMode;
 
 /* ==========================================================
@@ -140,11 +143,14 @@ typedef enum {
  * ========================================================== */
 
 static List g_list = { NULL, NULL, 0 };      /* основной список */
+static List g_undo_list = { NULL, NULL, 0 }; /* резервная копия для отмены */
 static Student **g_display = NULL;            /* массив указателей для отображения */
 static int g_display_count = 0;               /* количество отображаемых записей */
 static ViewMode g_view = VIEW_ALL;            /* текущий режим просмотра */
 static float g_scroll = 0.0f;                 /* смещение прокрутки таблицы */
 static int g_selected_idx = -1;               /* индекс выбранной строки в g_display */
+static int g_editing = 0;                     /* 1 = режим редактирования активен */
+static Student g_edit_backup;                 /* резервная копия при входе в режим */
 
 /* Буферы ввода для редактирования / добавления */
 static char g_inp_spec[MAX_SPEC + 1] = "";   int g_inp_spec_len = 0;
@@ -154,15 +160,11 @@ static char g_inp_form[MAX_FORM + 1] = "";   int g_inp_form_len = 0;
 static char g_inp_grades[GRADES][GRADE_STR] = { "" };
 static int  g_inp_grades_len[GRADES] = { 0, 0, 0, 0 };
 
-/* Буферы поиска */
-static char g_search_name[MAX_NAME + 1] = "";
-static int  g_search_name_len = 0;
-static char g_search_group[8] = "";
-static int  g_search_group_len = 0;
-static int  g_search_form = 0;   /* 0 = все, 1 = бюджет, 2 = плат */
+/* Фильтр по форме: 0 = все, 1 = бюджет, 2 = плат */
+static int g_filter_form = 0;
 
 /* Фокус ввода: -1 = нет, 0-3 = поля ввода (спец,группа,ФИО,форма),
-   4-7 = оценки, 8 = поискФИО, 9 = поискГруппа */
+   4-7 = оценки */
 static int g_focus = -1;
 
 /* Строка состояния */
@@ -286,6 +288,28 @@ static int listFind(const List *list, const Student *target) {
         cur = cur->next;
     }
     return -1;
+}
+
+/*
+ *  listCopy – глубокое копирование списка.
+ */
+static void listCopy(List *dst, const List *src) {
+    listClear(dst);
+    Student *cur = src->head;
+    while (cur) {
+        Student *s = newStudent(cur->speciality, cur->group, cur->full_name,
+                                cur->form, cur->grades[0], cur->grades[1],
+                                cur->grades[2], cur->grades[3]);
+        if (s) listPushBack(dst, s);
+        cur = cur->next;
+    }
+}
+
+/*
+ *  save_undo_state – сохраняет копию g_list в g_undo_list.
+ */
+static void save_undo_state(void) {
+    listCopy(&g_undo_list, &g_list);
 }
 
 /* ==========================================================
@@ -515,28 +539,39 @@ static void action_by_form(void) {
 }
 
 /*
- *  action_search – выполняет поиск по заданным критериям
- *  (ФИО, группа, форма обучения).
+ *  matches_filter – проверяет, проходит ли студент через текущий
+ *  фильтр по полям ввода и форме обучения.
  */
-static void action_search(void) {
-    rebuild_display();
-    if (g_display) free(g_display);
-    g_display = NULL;
-    g_display_count = 0;
+static int matches_filter(const Student *s) {
+    if (g_inp_spec_len > 0 && !str_icontains(s->speciality, g_inp_spec))
+        return 0;
+    if (g_inp_group_len > 0) {
+        int fg = atoi(g_inp_group);
+        if (fg > 0 && s->group != fg) return 0;
+    }
+    if (g_inp_name_len > 0 && !str_icontains(s->full_name, g_inp_name))
+        return 0;
+    if (g_inp_form_len > 0 && strcmp(s->form, g_inp_form) != 0)
+        return 0;
+    if (g_filter_form == 1 && strcmp(s->form, "бюджетная") != 0)
+        return 0;
+    if (g_filter_form == 2 && strcmp(s->form, "платная") != 0)
+        return 0;
+    return 1;
+}
 
-    int grp = (g_search_group_len > 0) ? atoi(g_search_group) : 0;
+/*
+ *  apply_filter – перестраивает g_display по текущему фильтру
+ *  из полей ввода и радиокнопок.
+ */
+static void apply_filter(void) {
+    if (g_display) { free(g_display); g_display = NULL; }
+    g_display_count = 0;
+    g_selected_idx = -1;
 
     Student *cur = g_list.head;
     while (cur) {
-        if (g_search_name_len > 0 && !str_icontains(cur->full_name, g_search_name))
-            { cur = cur->next; continue; }
-        if (grp > 0 && cur->group != grp)
-            { cur = cur->next; continue; }
-        if (g_search_form == 1 && strcmp(cur->form, "бюджетная") != 0)
-            { cur = cur->next; continue; }
-        if (g_search_form == 2 && strcmp(cur->form, "платная") != 0)
-            { cur = cur->next; continue; }
-        g_display_count++;
+        if (matches_filter(cur)) g_display_count++;
         cur = cur->next;
     }
 
@@ -545,34 +580,13 @@ static void action_search(void) {
         int idx = 0;
         cur = g_list.head;
         while (cur) {
-            if (g_search_name_len > 0 && !str_icontains(cur->full_name, g_search_name))
-                { cur = cur->next; continue; }
-            if (grp > 0 && cur->group != grp)
-                { cur = cur->next; continue; }
-            if (g_search_form == 1 && strcmp(cur->form, "бюджетная") != 0)
-                { cur = cur->next; continue; }
-            if (g_search_form == 2 && strcmp(cur->form, "платная") != 0)
-                { cur = cur->next; continue; }
-            g_display[idx++] = cur;
+            if (matches_filter(cur)) g_display[idx++] = cur;
             cur = cur->next;
         }
     }
-    g_view = VIEW_SEARCH;
-    g_scroll = 0.0f;
-    g_selected_idx = -1;
-}
 
-/*
- *  action_reset – сбрасывает критерии поиска и
- *  возвращает отображение всех студентов.
- */
-static void action_reset(void) {
-    rebuild_display();
-    g_search_name[0] = '\0';  g_search_name_len = 0;
-    g_search_group[0] = '\0'; g_search_group_len = 0;
-    g_search_form = 0;
-    g_focus = -1;
-    g_selected_idx = -1;
+    g_view = VIEW_ALL;
+    g_scroll = 0.0f;
 }
 
 /*
@@ -645,6 +659,7 @@ static int validate_input(void) {
  */
 static void action_add(void) {
     if (!validate_input()) return;
+    save_undo_state();
     int group = atoi(g_inp_group);
     int g1 = atoi(g_inp_grades[0]);
     int g2 = atoi(g_inp_grades[1]);
@@ -655,23 +670,51 @@ static void action_add(void) {
                             g1, g2, g3, g4);
     if (!s) { set_status("Ошибка: не удалось выделить память"); return; }
     listPushBack(&g_list, s);
-    rebuild_display();
     clear_input_fields();
     g_focus = -1;
+    apply_filter();
     set_status("Студент добавлен");
 }
 
 /*
- *  action_edit – обновляет данные выбранного студента.
- *  Изменяет поля существующего узла и пересчитывает
- *  средний балл.
+ *  copy_student_data – копирует данные из src в dst (без next).
  */
-static void action_edit(void) {
+static void copy_student_data(Student *dst, const Student *src) {
+    strncpy(dst->speciality, src->speciality, MAX_SPEC);
+    dst->speciality[MAX_SPEC] = '\0';
+    dst->group = src->group;
+    strncpy(dst->full_name, src->full_name, MAX_NAME);
+    dst->full_name[MAX_NAME] = '\0';
+    strncpy(dst->form, src->form, MAX_FORM);
+    dst->form[MAX_FORM] = '\0';
+    for (int i = 0; i < GRADES; i++) dst->grades[i] = src->grades[i];
+    dst->avg_score = src->avg_score;
+}
+
+/*
+ *  action_edit_mode – входит в режим редактирования.
+ *  Сохраняет резервную копию и заполняет поля ввода.
+ */
+static void action_edit_mode(void) {
     if (g_selected_idx < 0 || g_selected_idx >= g_display_count) {
         set_status("Ошибка: выберите студента из таблицы");
         return;
     }
+    copy_student_data(&g_edit_backup, g_display[g_selected_idx]);
+    fill_input_from_student(g_display[g_selected_idx]);
+    g_editing = 1;
+    g_focus = 0;
+    set_status("Режим редактирования — изменения видны в таблице");
+}
+
+/*
+ *  action_confirm_edit – сохраняет изменения из полей ввода
+ *  в выбранного студента и выходит из режима редактирования.
+ */
+static void action_confirm_edit(void) {
+    if (!g_editing) return;
     if (!validate_input()) return;
+    save_undo_state();
 
     Student *s = g_display[g_selected_idx];
     strncpy(s->speciality, g_inp_spec, MAX_SPEC);
@@ -687,7 +730,31 @@ static void action_edit(void) {
     s->grades[3] = atoi(g_inp_grades[3]);
     s->avg_score = calc_avg(s->grades);
 
-    set_status("Данные студента обновлены");
+    g_editing = 0;
+    g_focus = -1;
+    apply_filter();
+    for (int i = 0; i < g_display_count; i++) {
+        if (g_display[i] == s) { g_selected_idx = i; break; }
+    }
+    set_status("Изменения сохранены");
+}
+
+/*
+ *  action_cancel_edit – отменяет редактирование, восстанавливая
+ *  исходные данные студента.
+ */
+static void action_cancel_edit(void) {
+    if (!g_editing) return;
+    if (g_selected_idx >= 0 && g_selected_idx < g_display_count) {
+        Student *s = g_display[g_selected_idx];
+        copy_student_data(s, &g_edit_backup);
+    }
+    g_editing = 0;
+    g_focus = -1;
+    clear_input_fields();
+    g_filter_form = 0;
+    apply_filter();
+    set_status("Редактирование отменено");
 }
 
 /*
@@ -698,15 +765,60 @@ static void action_delete(void) {
         set_status("Ошибка: выберите студента из таблицы");
         return;
     }
+    if (g_editing) {
+        if (g_selected_idx >= 0) copy_student_data(g_display[g_selected_idx], &g_edit_backup);
+        g_editing = 0;
+        g_focus = -1;
+    }
     Student *target = g_display[g_selected_idx];
     int list_idx = listFind(&g_list, target);
     if (list_idx < 0) { set_status("Ошибка: студент не найден в списке"); return; }
+    save_undo_state();
     listRemove(&g_list, list_idx);
-    rebuild_display();
     clear_input_fields();
     g_selected_idx = -1;
     g_focus = -1;
+    apply_filter();
     set_status("Студент удалён");
+}
+
+/*
+ *  action_clear – очищает поля ввода и сбрасывает фильтр.
+ */
+static void action_clear(void) {
+    clear_input_fields();
+    g_selected_idx = -1;
+    g_focus = -1;
+    g_filter_form = 0;
+    apply_filter();
+    set_status("Фильтр сброшен");
+}
+
+/*
+ *  action_undo – отменяет последнее действие (добавление,
+ *  редактирование, удаление, загрузку).
+ */
+static void action_undo(void) {
+    if (g_undo_list.count == 0) {
+        set_status("Нет действий для отмены");
+        return;
+    }
+    listClear(&g_list);
+    Student *cur = g_undo_list.head;
+    while (cur) {
+        Student *s = newStudent(cur->speciality, cur->group, cur->full_name,
+                                cur->form, cur->grades[0], cur->grades[1],
+                                cur->grades[2], cur->grades[3]);
+        if (s) listPushBack(&g_list, s);
+        cur = cur->next;
+    }
+    listClear(&g_undo_list);
+    clear_input_fields();
+    g_selected_idx = -1;
+    g_focus = -1;
+    g_filter_form = 0;
+    apply_filter();
+    set_status("Действие отменено");
 }
 
 /* ==========================================================
@@ -892,13 +1004,27 @@ static void draw_row(int idx, int y, const Student *s, int selected) {
                   selected ? ROW_SELECTED : ((idx % 2 == 0) ? ROW_EVEN : ROW_ODD));
     char b[7][64];
     snprintf(b[0], sizeof(b[0]), "%d", idx + 1);
-    snprintf(b[1], sizeof(b[1]), "%d", s->group);
-    strcpy(b[2], s->full_name);
-    strcpy(b[3], s->speciality);
-    strcpy(b[4], s->form);
-    snprintf(b[5], sizeof(b[5]), "%d %d %d %d",
-             s->grades[0], s->grades[1], s->grades[2], s->grades[3]);
-    snprintf(b[6], sizeof(b[6]), "%.2f", s->avg_score);
+    if (g_editing && selected) {
+        snprintf(b[1], sizeof(b[1]), "%s", g_inp_group);
+        strcpy(b[2], g_inp_name);
+        strcpy(b[3], g_inp_spec);
+        strcpy(b[4], g_inp_form);
+        int gv[GRADES];
+        for (int i = 0; i < GRADES; i++) gv[i] = atoi(g_inp_grades[i]);
+        snprintf(b[5], sizeof(b[5]), "%d %d %d %d", gv[0], gv[1], gv[2], gv[3]);
+        float avg = (g_inp_grades_len[0] && g_inp_grades_len[1] &&
+                     g_inp_grades_len[2] && g_inp_grades_len[3])
+                    ? (gv[0]+gv[1]+gv[2]+gv[3])/4.0f : s->avg_score;
+        snprintf(b[6], sizeof(b[6]), "%.2f", avg);
+    } else {
+        snprintf(b[1], sizeof(b[1]), "%d", s->group);
+        strcpy(b[2], s->full_name);
+        strcpy(b[3], s->speciality);
+        strcpy(b[4], s->form);
+        snprintf(b[5], sizeof(b[5]), "%d %d %d %d",
+                 s->grades[0], s->grades[1], s->grades[2], s->grades[3]);
+        snprintf(b[6], sizeof(b[6]), "%.2f", s->avg_score);
+    }
     Color cc[] = {
         TEXT_COLOR, TEXT_COLOR, TEXT_COLOR, TEXT_COLOR,
         (strcmp(s->form, "бюджетная") == 0) ? TITLE_BUDGET : TITLE_PAID,
@@ -971,6 +1097,7 @@ static void draw_table(void) {
  */
 static void handle_keys(void) {
     if (g_focus < 0) return;
+    int changed = 0;
     int c = GetCharPressed();
     while (c > 0) {
         int printable = (c >= 32 && c <= 126) ||
@@ -978,34 +1105,30 @@ static void handle_keys(void) {
                         (c >= 0x500 && c <= 0x52F);
         if (printable) {
             if (g_focus == 0)
-                utf8_append(g_inp_spec, &g_inp_spec_len, MAX_SPEC, c);
+                { utf8_append(g_inp_spec, &g_inp_spec_len, MAX_SPEC, c); changed = 1; }
             else if (g_focus == 1 && c >= '0' && c <= '9' && g_inp_group_len < 6)
-                utf8_append(g_inp_group, &g_inp_group_len, 6, c);
+                { utf8_append(g_inp_group, &g_inp_group_len, 6, c); changed = 1; }
             else if (g_focus == 2)
-                utf8_append(g_inp_name, &g_inp_name_len, MAX_NAME, c);
+                { utf8_append(g_inp_name, &g_inp_name_len, MAX_NAME, c); changed = 1; }
             else if (g_focus == 3)
-                utf8_append(g_inp_form, &g_inp_form_len, MAX_FORM, c);
+                { utf8_append(g_inp_form, &g_inp_form_len, MAX_FORM, c); changed = 1; }
             else if (g_focus >= 4 && g_focus <= 7) {
                 int gi = g_focus - 4;
                 if (c >= '0' && c <= '9' && g_inp_grades_len[gi] < 2)
-                    utf8_append(g_inp_grades[gi], &g_inp_grades_len[gi], 2, c);
-            } else if (g_focus == 8)
-                utf8_append(g_search_name, &g_search_name_len, MAX_NAME, c);
-            else if (g_focus == 9 && c >= '0' && c <= '9' && g_search_group_len < 6)
-                utf8_append(g_search_group, &g_search_group_len, 6, c);
+                    { utf8_append(g_inp_grades[gi], &g_inp_grades_len[gi], 2, c); changed = 1; }
+            }
         }
         c = GetCharPressed();
     }
     if (IsKeyPressed(KEY_BACKSPACE)) {
-        if (g_focus == 0) utf8_pop(g_inp_spec, &g_inp_spec_len);
-        else if (g_focus == 1) utf8_pop(g_inp_group, &g_inp_group_len);
-        else if (g_focus == 2) utf8_pop(g_inp_name, &g_inp_name_len);
-        else if (g_focus == 3) utf8_pop(g_inp_form, &g_inp_form_len);
+        if (g_focus == 0) { utf8_pop(g_inp_spec, &g_inp_spec_len); changed = 1; }
+        else if (g_focus == 1) { utf8_pop(g_inp_group, &g_inp_group_len); changed = 1; }
+        else if (g_focus == 2) { utf8_pop(g_inp_name, &g_inp_name_len); changed = 1; }
+        else if (g_focus == 3) { utf8_pop(g_inp_form, &g_inp_form_len); changed = 1; }
         else if (g_focus >= 4 && g_focus <= 7)
-            utf8_pop(g_inp_grades[g_focus - 4], &g_inp_grades_len[g_focus - 4]);
-        else if (g_focus == 8) utf8_pop(g_search_name, &g_search_name_len);
-        else if (g_focus == 9) utf8_pop(g_search_group, &g_search_group_len);
+            { utf8_pop(g_inp_grades[g_focus - 4], &g_inp_grades_len[g_focus - 4]); changed = 1; }
     }
+    if (changed && !g_editing) apply_filter();
 }
 
 /*
@@ -1107,26 +1230,19 @@ int main(void) {
             Vector2 m = GetMousePosition();
 
             /* Поля редактирования (8 шт.) */
-            int inp_x[] = { 10, 260, 380, 670, 840, 900, 960, 1020 };
-            int inp_w[] = { 240, 110, 280, 160, 55, 55, 55, 55 };
+            int inp_x[] = { 10, 260, 380, 670, 808, 858, 908, 958 };
+            int inp_w[] = { 240, 110, 280, 130, 46, 46, 46, 46 };
             g_focus = -1;
             for (int i = 0; i < 8; i++) {
                 Rectangle r = { (float)inp_x[i], INPUT_Y, (float)inp_w[i], INPUT_H };
                 if (CheckCollisionPointRec(m, r)) { g_focus = i; break; }
             }
 
-            /* Поля поиска */
-            if (g_focus < 0) {
-                Rectangle r1 = { 10, SEARCH_Y, 240, BOX_H };
-                Rectangle r2 = { 260, SEARCH_Y, 100, BOX_H };
-                if (CheckCollisionPointRec(m, r1)) g_focus = 8;
-                else if (CheckCollisionPointRec(m, r2)) g_focus = 9;
-            }
-
             /* Клик по строке таблицы */
             if (g_focus < 0) {
                 int ri = get_row_at_click((int)m.y);
                 if (ri >= 0 && ri < g_display_count) {
+                    if (g_editing) action_confirm_edit();
                     g_selected_idx = ri;
                     fill_input_from_student(g_display[ri]);
                 }
@@ -1146,7 +1262,7 @@ int main(void) {
         BeginDrawing();
         ClearBackground(BG_COLOR);
 
-        /* Фон единой панели ввода-поиска */
+        /* Фон панели редактирования */
         {
             Rectangle pr = { 8, (float)PANEL_Y, SCREEN_W - 16, PANEL_H };
             DrawRectangleRounded(pr, 0.08f, 6, (Color){ 235, 235, 250, 255 });
@@ -1155,53 +1271,56 @@ int main(void) {
 
         /* Кнопки действий */
         if (btn(10,   BTN_Y, 100, BTN_H, "Добавить",  BTN_ADD, BTN_ADD_HOVER))
-            action_add();
-        if (btn(120,  BTN_Y, 100, BTN_H, "Изменить",  BTN_COLOR, BTN_HOVER))
-            action_edit();
-        if (btn(230,  BTN_Y, 90,  BTN_H, "Удалить",   BTN_DEL, BTN_DEL_HOVER))
-            action_delete();
-        if (btn(330,  BTN_Y, 80,  BTN_H, "Сорт.",     BTN_COLOR, BTN_HOVER))
-            action_sort();
-        if (btn(420,  BTN_Y, 80,  BTN_H, "Отл.+",     BTN_COLOR, BTN_HOVER))
-            action_excellent_paid();
-        if (btn(510,  BTN_Y, 110, BTN_H, "По форме",  BTN_COLOR, BTN_HOVER))
-            action_by_form();
-        if (btn(630,  BTN_Y, 100, BTN_H, "Сохранить", BTN_SAVE, BTN_SAVE_HOVER))
-            saveDbCsv(CSV_FILE, &g_list);
-        if (btn(740,  BTN_Y, 100, BTN_H, "Загрузить", BTN_SAVE, BTN_SAVE_HOVER))
-            { listClear(&g_list); loadDbCsv(CSV_FILE, &g_list); rebuild_display(); clear_input_fields(); g_selected_idx = -1; }
+            { if (g_editing) action_confirm_edit(); action_add(); }
+        if (g_editing) {
+            if (btn(120, BTN_Y, 80, BTN_H, "Готово", (Color){50,150,50,255}, (Color){70,190,70,255}))
+                action_confirm_edit();
+            if (btn(208, BTN_Y, 36, BTN_H, "X",   (Color){180,50,50,255}, (Color){220,70,70,255}))
+                action_cancel_edit();
+        } else {
+            if (btn(120, BTN_Y, 100, BTN_H, "Изменить", BTN_COLOR, BTN_HOVER))
+                action_edit_mode();
+        }
+        {   int dx = g_editing ? 22 : 0;
+            if (btn(230+dx, BTN_Y, 90,  BTN_H, "Удалить",   BTN_DEL, BTN_DEL_HOVER))
+                action_delete();
+            if (btn(330+dx, BTN_Y, 80,  BTN_H, "Сорт.",     BTN_COLOR, BTN_HOVER))
+                action_sort();
+            if (btn(420+dx, BTN_Y, 80,  BTN_H, "Отл.+",     BTN_COLOR, BTN_HOVER))
+                action_excellent_paid();
+            if (btn(510+dx, BTN_Y, 110, BTN_H, "По форме",  BTN_COLOR, BTN_HOVER))
+                action_by_form();
+            if (btn(630+dx, BTN_Y, 100, BTN_H, "Сохранить", BTN_SAVE, BTN_SAVE_HOVER))
+                saveDbCsv(CSV_FILE, &g_list);
+            if (btn(740+dx, BTN_Y, 100, BTN_H, "Загрузить", BTN_SAVE, BTN_SAVE_HOVER))
+                { save_undo_state(); listClear(&g_list); loadDbCsv(CSV_FILE, &g_list); clear_input_fields(); g_selected_idx = -1; apply_filter(); }
+            if (btn(855+dx, BTN_Y, 100, BTN_H, "Очистить", BTN_CLEAR, BTN_CLEAR_HOVER))
+                action_clear();
+            if (btn(965+dx, BTN_Y, 100, BTN_H, "Отменить", BTN_UNDO, BTN_UNDO_HOVER))
+                action_undo();
+        }
 
         /* Поля редактирования */
         textbox(10,  INPUT_Y, 240, INPUT_H, "Спец.:", g_inp_spec, g_focus == 0);
         textbox(260, INPUT_Y, 110, INPUT_H, "Груп.:", g_inp_group, g_focus == 1);
         textbox(380, INPUT_Y, 280, INPUT_H, "ФИО:",   g_inp_name,  g_focus == 2);
-        textbox(670, INPUT_Y, 160, INPUT_H, "Форма:", g_inp_form,  g_focus == 3);
+        textbox(670, INPUT_Y, 130, INPUT_H, "Форма:", g_inp_form,  g_focus == 3);
 
         const char *grade_labels[] = { "1:", "2:", "3:", "4:" };
-        int gx = 840;
+        int gx = 808;
         for (int i = 0; i < GRADES; i++) {
-            textbox(gx, INPUT_Y, 55, INPUT_H, grade_labels[i],
+            textbox(gx, INPUT_Y, 46, INPUT_H, grade_labels[i],
                     g_inp_grades[i], g_focus == 4 + i);
-            gx += 60;
+            gx += 50;
         }
 
-        /* Строка поиска */
-        textbox(10,  SEARCH_Y, 240, BOX_H, "Поиск ФИО:", g_search_name,  g_focus == 8);
-        textbox(260, SEARCH_Y, 100, BOX_H, "Груп.:",     g_search_group, g_focus == 9);
-
+        /* Радио-фильтр по форме на той же строке */
         const char *form_items[] = { "Все", "Бюджет", "Плат" };
         {
-            int old_form = g_search_form;
-            g_search_form = radio_group(390, SEARCH_Y, BOX_H, form_items, 3, g_search_form);
-            if (g_search_form != old_form) action_search();
+            int old_form = g_filter_form;
+            g_filter_form = radio_group(1010, INPUT_Y, INPUT_H, form_items, 3, g_filter_form);
+            if (g_filter_form != old_form && !g_editing) apply_filter();
         }
-
-        if (btn(560, SEARCH_Y, 80, BOX_H, "Найти",
-                (Color){ 50, 160, 50, 255 }, (Color){ 70, 200, 70, 255 }))
-            action_search();
-        if (btn(650, SEARCH_Y, 80, BOX_H, "Сброс",
-                (Color){ 160, 60, 60, 255 }, (Color){ 200, 80, 80, 255 }))
-            action_reset();
 
         draw_table();
 
@@ -1212,7 +1331,6 @@ int main(void) {
             case VIEW_SORTED:         mode = "Сортировка по группам и ФИО"; break;
             case VIEW_EXCELLENT_PAID: mode = "Отличники (платная форма)"; break;
             case VIEW_BY_FORM:        mode = "Списки по форме обучения"; break;
-            case VIEW_SEARCH:         mode = "Результат поиска"; break;
         }
         char info[128];
         snprintf(info, sizeof(info), "Режим: %s  |  Показано: %d из %d",
@@ -1239,6 +1357,7 @@ int main(void) {
 
     /* Очистка памяти */
     listClear(&g_list);
+    listClear(&g_undo_list);
     if (g_display) free(g_display);
 
     UnloadFont(g_font);
