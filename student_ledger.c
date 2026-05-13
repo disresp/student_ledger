@@ -35,12 +35,22 @@
 #include <ctype.h>
 #include <math.h>
 
+/* Временный буфер ввода имени файла */
+#define FILENAME_BUF 256
+static char g_temp_filename[FILENAME_BUF] = "";
+static int  g_temp_filename_len = 0;
+static int  g_waiting_filename = 0;   /* 1 = ожидание ввода имени файла */
+/* 0=импорт, 1=экспорт CSV, 2=экспорт TXT */
+static int  g_filename_mode = 0;
+
 /* ==========================================================
  *  КОНСТАНТЫ
  * ========================================================== */
 
-#define SCREEN_W    1200
+#define SCREEN_W    1400
 #define SCREEN_H    700
+#define SIDE_PANEL_W  160
+#define MAIN_X      180   /* сдвиг основного контента вправо */
 
 #define MAX_SPEC    50
 #define MAX_NAME    100
@@ -172,6 +182,10 @@ static char g_status[128] = "";
 static double g_status_time = 0.0;
 
 static Font g_font;
+
+/* Предварительные объявления */
+static void clear_input_fields(void);
+static void apply_filter(void);
 
 /* ==========================================================
  *  ВСПОМОГАТЕЛЬНЫЕ ФУНКЦИИ
@@ -373,6 +387,97 @@ static void loadDbCsv(const char *filename, List *list) {
     fclose(f);
     char msg[64];
     snprintf(msg, sizeof(msg), "Загружено %d записей из students.csv", loaded);
+    set_status(msg);
+}
+
+/*
+ *  import_csv – импортирует студентов из произвольного CSV-файла.
+ *  Добавляет записи в конец текущего списка (не заменяя).
+ *  Перед импортом сохраняет undo-состояние.
+ */
+static void import_csv(const char *filename) {
+    FILE *f = fopen(filename, "r");
+    if (!f) { set_status("Ошибка: не удалось открыть файл для импорта"); return; }
+    save_undo_state();
+    char line[512];
+    int imported = 0;
+    while (fgets(line, sizeof(line), f)) {
+        size_t len = strlen(line);
+        if (len > 0 && line[len - 1] == '\n') line[len - 1] = '\0';
+        if (len == 0) continue;
+
+        char *spec = line;
+        char *p = strchr(spec, ';');  if (!p) continue; *p++ = '\0';
+        char *grp_s = p;
+        p = strchr(grp_s, ';');       if (!p) continue; *p++ = '\0';
+        char *name = p;
+        p = strchr(name, ';');        if (!p) continue; *p++ = '\0';
+        char *form = p;
+        p = strchr(form, ';');        if (!p) continue; *p++ = '\0';
+        int g1 = atoi(p);
+        p = strchr(p, ';');           if (!p) continue; *p++ = '\0';
+        int g2 = atoi(p);
+        p = strchr(p, ';');           if (!p) continue; *p++ = '\0';
+        int g3 = atoi(p);
+        p = strchr(p, ';');           if (!p) continue; *p++ = '\0';
+        int g4 = atoi(p);
+
+        int group = atoi(grp_s);
+        Student *s = newStudent(spec, group, name, form, g1, g2, g3, g4);
+        if (s) { listPushBack(&g_list, s); imported++; }
+    }
+    fclose(f);
+    clear_input_fields();
+    g_selected_idx = -1;
+    g_focus = -1;
+    apply_filter();
+    char msg[64];
+    snprintf(msg, sizeof(msg), "Импортировано %d записей из %s", imported, filename);
+    set_status(msg);
+}
+
+/*
+ *  export_csv – экспортирует текущий отображаемый список
+ *  (g_display) в CSV-файл. Формат: специальность;группа;ФИО;форма;оценка1;…;оценка4.
+ */
+static void export_csv(const char *filename, Student **display, int count) {
+    FILE *f = fopen(filename, "w");
+    if (!f) { set_status("Ошибка: не удалось создать файл для экспорта"); return; }
+    for (int i = 0; i < count; i++) {
+        Student *s = display[i];
+        fprintf(f, "%s;%d;%s;%s;%d;%d;%d;%d\n",
+                s->speciality, s->group, s->full_name, s->form,
+                s->grades[0], s->grades[1], s->grades[2], s->grades[3]);
+    }
+    fclose(f);
+    char msg[64];
+    snprintf(msg, sizeof(msg), "Экспортировано %d записей в %s", count, filename);
+    set_status(msg);
+}
+
+/*
+ *  export_txt – экспортирует текущий отображаемый список
+ *  в текстовый файл с форматированием (колонки, заголовки).
+ */
+static void export_txt(const char *filename, Student **display, int count) {
+    FILE *f = fopen(filename, "w");
+    if (!f) { set_status("Ошибка: не удалось создать файл для экспорта"); return; }
+    fprintf(f, "%-4s %-8s %-30s %-30s %-12s %-16s %s\n",
+            "№", "Группа", "ФИО", "Специальность", "Форма", "Оценки", "Ср.балл");
+    for (int i = 0; i < 101; i++) fputc('-', f);
+    fputc('\n', f);
+    for (int i = 0; i < count; i++) {
+        Student *s = display[i];
+        char grades[32];
+        snprintf(grades, sizeof(grades), "%d %d %d %d",
+                 s->grades[0], s->grades[1], s->grades[2], s->grades[3]);
+        fprintf(f, "%-4d %-8d %-30s %-30s %-12s %-16s %.2f\n",
+                i + 1, s->group, s->full_name, s->speciality, s->form,
+                grades, s->avg_score);
+    }
+    fclose(f);
+    char msg[64];
+    snprintf(msg, sizeof(msg), "Отчёт экспортирован в %s", filename);
     set_status(msg);
 }
 
@@ -945,8 +1050,9 @@ static int radio_group(int x, int y, int h, const char *items[],
     return selected;
 }
 
-/* Позиции колонок таблицы */
-static const int COL_X[] = { 10, 45, 115, 410, 690, 840, 970 };
+/* Позиции колонок таблицы (сдвинуты на MAIN_X) */
+static const int COL_X[] = { 10+MAIN_X, 45+MAIN_X, 115+MAIN_X,
+                             410+MAIN_X, 690+MAIN_X, 840+MAIN_X, 970+MAIN_X };
 static const int COL_W[] = { 35, 70, 295, 280, 150, 130, 230 };
 
 /*
@@ -1096,6 +1202,35 @@ static void draw_table(void) {
  *  кириллицу и служебные клавиши.
  */
 static void handle_keys(void) {
+    /* Режим ввода имени файла */
+    if (g_waiting_filename) {
+        int c = GetCharPressed();
+        while (c > 0) {
+            if (c >= 32 && c <= 126 && g_temp_filename_len < FILENAME_BUF - 1) {
+                g_temp_filename[g_temp_filename_len++] = (char)c;
+                g_temp_filename[g_temp_filename_len] = '\0';
+            }
+            c = GetCharPressed();
+        }
+        if (IsKeyPressed(KEY_BACKSPACE) && g_temp_filename_len > 0) {
+            g_temp_filename[--g_temp_filename_len] = '\0';
+        }
+        if (IsKeyPressed(KEY_ENTER) && g_temp_filename_len > 0) {
+            if (g_filename_mode == 0) import_csv(g_temp_filename);
+            else if (g_filename_mode == 1) export_csv(g_temp_filename, g_display, g_display_count);
+            else export_txt(g_temp_filename, g_display, g_display_count);
+            g_waiting_filename = 0;
+            g_temp_filename[0] = '\0';
+            g_temp_filename_len = 0;
+        }
+        if (IsKeyPressed(KEY_ESCAPE)) {
+            g_waiting_filename = 0;
+            g_temp_filename[0] = '\0';
+            g_temp_filename_len = 0;
+        }
+        return;
+    }
+
     if (g_focus < 0) return;
     int changed = 0;
     int c = GetCharPressed();
@@ -1230,7 +1365,7 @@ int main(void) {
             Vector2 m = GetMousePosition();
 
             /* Поля редактирования (8 шт.) */
-            int inp_x[] = { 10, 260, 380, 670, 808, 858, 908, 958 };
+            int inp_x[] = { MAIN_X+10, MAIN_X+260, MAIN_X+380, MAIN_X+670, MAIN_X+808, MAIN_X+858, MAIN_X+908, MAIN_X+958 };
             int inp_w[] = { 240, 110, 280, 130, 46, 46, 46, 46 };
             g_focus = -1;
             for (int i = 0; i < 8; i++) {
@@ -1262,64 +1397,81 @@ int main(void) {
         BeginDrawing();
         ClearBackground(BG_COLOR);
 
-        /* Фон панели редактирования */
-        {
-            Rectangle pr = { 8, (float)PANEL_Y, SCREEN_W - 16, PANEL_H };
+        /* Фон панели редактирования (если не режим ввода имени) */
+        if (!g_waiting_filename) {
+            Rectangle pr = { (float)MAIN_X+8, (float)PANEL_Y, SCREEN_W - MAIN_X - 16, PANEL_H };
             DrawRectangleRounded(pr, 0.08f, 6, (Color){ 235, 235, 250, 255 });
             DrawRectangleRoundedLines(pr, 0.08f, 6, (Color){ 200, 200, 225, 255 });
         }
 
-        /* Кнопки действий */
-        if (btn(10,   BTN_Y, 100, BTN_H, "Добавить",  BTN_ADD, BTN_ADD_HOVER))
+        /* Кнопки действий (верхняя панель) */
+        if (btn(MAIN_X+10, BTN_Y, 100, BTN_H, "Добавить",  BTN_ADD, BTN_ADD_HOVER))
             { if (g_editing) action_confirm_edit(); action_add(); }
         if (g_editing) {
-            if (btn(120, BTN_Y, 80, BTN_H, "Готово", (Color){50,150,50,255}, (Color){70,190,70,255}))
+            if (btn(MAIN_X+120, BTN_Y, 80, BTN_H, "Готово", (Color){50,150,50,255}, (Color){70,190,70,255}))
                 action_confirm_edit();
-            if (btn(208, BTN_Y, 36, BTN_H, "X",   (Color){180,50,50,255}, (Color){220,70,70,255}))
+            if (btn(MAIN_X+208, BTN_Y, 36, BTN_H, "X",   (Color){180,50,50,255}, (Color){220,70,70,255}))
                 action_cancel_edit();
         } else {
-            if (btn(120, BTN_Y, 100, BTN_H, "Изменить", BTN_COLOR, BTN_HOVER))
+            if (btn(MAIN_X+120, BTN_Y, 100, BTN_H, "Изменить", BTN_COLOR, BTN_HOVER))
                 action_edit_mode();
         }
         {   int dx = g_editing ? 22 : 0;
-            if (btn(230+dx, BTN_Y, 90,  BTN_H, "Удалить",   BTN_DEL, BTN_DEL_HOVER))
+            if (btn(MAIN_X+230+dx, BTN_Y, 90,  BTN_H, "Удалить",   BTN_DEL, BTN_DEL_HOVER))
                 action_delete();
-            if (btn(330+dx, BTN_Y, 80,  BTN_H, "Сорт.",     BTN_COLOR, BTN_HOVER))
+            if (btn(MAIN_X+330+dx, BTN_Y, 80,  BTN_H, "Сорт.",     BTN_COLOR, BTN_HOVER))
                 action_sort();
-            if (btn(420+dx, BTN_Y, 80,  BTN_H, "Отл.+",     BTN_COLOR, BTN_HOVER))
+            if (btn(MAIN_X+420+dx, BTN_Y, 80,  BTN_H, "Отл.+",     BTN_COLOR, BTN_HOVER))
                 action_excellent_paid();
-            if (btn(510+dx, BTN_Y, 110, BTN_H, "По форме",  BTN_COLOR, BTN_HOVER))
+            if (btn(MAIN_X+510+dx, BTN_Y, 110, BTN_H, "По форме",  BTN_COLOR, BTN_HOVER))
                 action_by_form();
-            if (btn(630+dx, BTN_Y, 100, BTN_H, "Сохранить", BTN_SAVE, BTN_SAVE_HOVER))
-                saveDbCsv(CSV_FILE, &g_list);
-            if (btn(740+dx, BTN_Y, 100, BTN_H, "Загрузить", BTN_SAVE, BTN_SAVE_HOVER))
-                { save_undo_state(); listClear(&g_list); loadDbCsv(CSV_FILE, &g_list); clear_input_fields(); g_selected_idx = -1; apply_filter(); }
-            if (btn(855+dx, BTN_Y, 100, BTN_H, "Очистить", BTN_CLEAR, BTN_CLEAR_HOVER))
-                action_clear();
-            if (btn(965+dx, BTN_Y, 100, BTN_H, "Отменить", BTN_UNDO, BTN_UNDO_HOVER))
-                action_undo();
         }
 
-        /* Поля редактирования */
-        textbox(10,  INPUT_Y, 240, INPUT_H, "Спец.:", g_inp_spec, g_focus == 0);
-        textbox(260, INPUT_Y, 110, INPUT_H, "Груп.:", g_inp_group, g_focus == 1);
-        textbox(380, INPUT_Y, 280, INPUT_H, "ФИО:",   g_inp_name,  g_focus == 2);
-        textbox(670, INPUT_Y, 130, INPUT_H, "Форма:", g_inp_form,  g_focus == 3);
+        /* Поля редактирования или ввод имени файла */
+        if (g_waiting_filename) {
+            DrawRectangle(MAIN_X+4, PANEL_Y, SCREEN_W-MAIN_X-8, PANEL_H+10,
+                          (Color){ 240, 240, 250, 255 });
+            DrawRectangleLines(MAIN_X+4, PANEL_Y, SCREEN_W-MAIN_X-8, PANEL_H+10,
+                               (Color){ 200, 200, 225, 255 });
+            const char *hint = (g_filename_mode==0) ? "Введите имя файла для импорта:"
+                              : (g_filename_mode==1) ? "Введите имя файла для экспорта CSV:"
+                              : "Введите имя файла для экспорта TXT:";
+            DrawTextEx(g_font, hint,
+                       (Vector2){ MAIN_X+12, PANEL_Y+8 }, 14, 1, LABEL_COLOR);
+            textbox(MAIN_X+12, PANEL_Y+30, 300, INPUT_H, "Файл:",
+                    g_temp_filename, 1);
+            if (btn(MAIN_X+320, PANEL_Y+30, 80, INPUT_H, "OK",
+                    (Color){50,150,50,255}, (Color){70,190,70,255})) {
+                if (g_temp_filename_len > 0) {
+                    if (g_filename_mode == 0) import_csv(g_temp_filename);
+                    else if (g_filename_mode == 1) export_csv(g_temp_filename, g_display, g_display_count);
+                    else export_txt(g_temp_filename, g_display, g_display_count);
+                }
+                g_waiting_filename = 0;
+            }
+            if (btn(MAIN_X+408, PANEL_Y+30, 80, INPUT_H, "Отмена",
+                    (Color){180,50,50,255}, (Color){220,70,70,255}))
+                g_waiting_filename = 0;
+        } else {
+            textbox(MAIN_X+10, INPUT_Y, 240, INPUT_H, "Спец.:", g_inp_spec, g_focus == 0);
+            textbox(MAIN_X+260, INPUT_Y, 110, INPUT_H, "Груп.:", g_inp_group, g_focus == 1);
+            textbox(MAIN_X+380, INPUT_Y, 280, INPUT_H, "ФИО:",   g_inp_name,  g_focus == 2);
+            textbox(MAIN_X+670, INPUT_Y, 130, INPUT_H, "Форма:", g_inp_form,  g_focus == 3);
 
-        const char *grade_labels[] = { "1:", "2:", "3:", "4:" };
-        int gx = 808;
-        for (int i = 0; i < GRADES; i++) {
-            textbox(gx, INPUT_Y, 46, INPUT_H, grade_labels[i],
-                    g_inp_grades[i], g_focus == 4 + i);
-            gx += 50;
-        }
+            const char *grade_labels[] = { "1:", "2:", "3:", "4:" };
+            int gx = MAIN_X+808;
+            for (int i = 0; i < GRADES; i++) {
+                textbox(gx, INPUT_Y, 46, INPUT_H, grade_labels[i],
+                        g_inp_grades[i], g_focus == 4 + i);
+                gx += 50;
+            }
 
-        /* Радио-фильтр по форме на той же строке */
-        const char *form_items[] = { "Все", "Бюджет", "Плат" };
-        {
-            int old_form = g_filter_form;
-            g_filter_form = radio_group(1010, INPUT_Y, INPUT_H, form_items, 3, g_filter_form);
-            if (g_filter_form != old_form && !g_editing) apply_filter();
+            const char *form_items[] = { "Все", "Бюджет", "Плат" };
+            {
+                int old_form = g_filter_form;
+                g_filter_form = radio_group(MAIN_X+1010, INPUT_Y, INPUT_H, form_items, 3, g_filter_form);
+                if (g_filter_form != old_form && !g_editing) apply_filter();
+            }
         }
 
         draw_table();
@@ -1335,7 +1487,7 @@ int main(void) {
         char info[128];
         snprintf(info, sizeof(info), "Режим: %s  |  Показано: %d из %d",
                  mode, g_display_count, g_list.count);
-        DrawTextEx(g_font, info, (Vector2){ 10, (float)SCREEN_H - 22 },
+        DrawTextEx(g_font, info, (Vector2){ (float)MAIN_X, (float)SCREEN_H - 22 },
                    14, 1, LABEL_COLOR);
 
         /* Сообщение статуса */
@@ -1347,6 +1499,33 @@ int main(void) {
             DrawTextEx(g_font, g_status,
                        (Vector2){ (float)(SCREEN_W - sz.x - 10), (float)SCREEN_H - 22 },
                        14, 1, sc);
+        }
+
+        /* === Боковая панель (поверх всего) === */
+        DrawRectangle(0, 0, SIDE_PANEL_W, SCREEN_H, (Color){ 230, 230, 240, 255 });
+        DrawLine(SIDE_PANEL_W, 0, SIDE_PANEL_W, SCREEN_H, (Color){ 200, 200, 210, 255 });
+        {
+            int sy = 10;
+            if (btn(5, sy, SIDE_PANEL_W-10, BTN_H, "Сохранить CSV", BTN_SAVE, BTN_SAVE_HOVER))
+                saveDbCsv(CSV_FILE, &g_list);
+            sy += BTN_H + 5;
+            if (btn(5, sy, SIDE_PANEL_W-10, BTN_H, "Загрузить CSV", BTN_SAVE, BTN_SAVE_HOVER))
+                { save_undo_state(); listClear(&g_list); loadDbCsv(CSV_FILE, &g_list); clear_input_fields(); g_selected_idx = -1; apply_filter(); }
+            sy += BTN_H + 5;
+            if (btn(5, sy, SIDE_PANEL_W-10, BTN_H, "Импорт CSV", BTN_COLOR, BTN_HOVER))
+                { g_temp_filename[0]='\0'; g_temp_filename_len=0; g_filename_mode=0; g_waiting_filename=1; }
+            sy += BTN_H + 5;
+            if (btn(5, sy, SIDE_PANEL_W-10, BTN_H, "Экспорт CSV", BTN_COLOR, BTN_HOVER))
+                { g_temp_filename[0]='\0'; g_temp_filename_len=0; g_filename_mode=1; g_waiting_filename=1; }
+            sy += BTN_H + 5;
+            if (btn(5, sy, SIDE_PANEL_W-10, BTN_H, "Экспорт TXT", BTN_COLOR, BTN_HOVER))
+                { g_temp_filename[0]='\0'; g_temp_filename_len=0; g_filename_mode=2; g_waiting_filename=1; }
+            sy += BTN_H + 5;
+            if (btn(5, sy, SIDE_PANEL_W-10, BTN_H, "Очистить", BTN_CLEAR, BTN_CLEAR_HOVER))
+                action_clear();
+            sy += BTN_H + 5;
+            if (btn(5, sy, SIDE_PANEL_W-10, BTN_H, "Отменить", BTN_UNDO, BTN_UNDO_HOVER))
+                action_undo();
         }
 
         EndDrawing();
