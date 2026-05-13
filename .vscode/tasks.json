@@ -1,0 +1,21 @@
+{
+    "version": "2.0.0",
+    "tasks": [
+        {
+            "label": "build",
+            "type": "shell",
+            "command": "C:\\msys64\\ucrt64\\bin\\gcc.exe",
+            "args": [
+                "${workspaceFolder}\\student_ledger.c",
+                "-o", "${workspaceFolder}\\student_ledger.exe",
+                "-IC:\\msys64\\ucrt64\\include",
+                "-LC:\\msys64\\ucrt64\\lib",
+                "-lraylib", "-lopengl32", "-lgdi32", "-lwinmm", "-mwindows"
+            ],
+            "group": {
+                "kind": "build",
+                "isDefault": true
+            }
+        }
+    ]
+}
