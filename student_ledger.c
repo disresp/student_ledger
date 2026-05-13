@@ -148,12 +148,13 @@ static int cmp_group_name(const void *a, const void *b) {
     return stricmp(sa->full_name, sb->full_name);
 }
 
-/* Сравнение по среднему баллу (убывание) */
+/* Сравнение по среднему баллу (убывание), при равенстве — по ФИО */
 static int cmp_avg_desc(const void *a, const void *b) {
     const Student *sa = *(const Student **)a;
     const Student *sb = *(const Student **)b;
-    if (fabs(sa->avg_score - sb->avg_score) < 0.001f) return 0;
-    return (sa->avg_score > sb->avg_score) ? -1 : 1;
+    if (fabs(sa->avg_score - sb->avg_score) > 0.001f)
+        return (sa->avg_score > sb->avg_score) ? -1 : 1;
+    return stricmp(sa->full_name, sb->full_name);
 }
 
 /* Проверка: содержит ли str подстроку substr (без учёта регистра) */
@@ -372,39 +373,71 @@ static int radio_group(int x, int y, int h, const char *items[],
     return selected;
 }
 
+/* Позиции колонок таблицы */
+static const int COL_X[] = { 10, 45, 115, 410, 650, 770, 900 };
+static const int COL_W[] = { 35, 70, 295, 240, 120, 130, 300 };
+
+/* Обрезать текст по ширине колонки, добавить ... если не влезает */
+static void draw_col_text(int col, int y, int font_size, const char *text, Color color) {
+    Vector2 sz = MeasureTextEx(g_font, text, font_size, 1);
+    if (sz.x <= COL_W[col] - 6) {
+        DrawTextEx(g_font, text, (Vector2){ (float)COL_X[col], y }, font_size, 1, color);
+        return;
+    }
+    /* Обрезаем, пока не влезет с "..." */
+    char buf[128];
+    int len = (int)strlen(text);
+    while (len > 0) {
+        int cut = len;
+        /* Отступаем на один UTF-8 символ */
+        cut--;
+        while (cut > 0 && ((unsigned char)text[cut] & 0xC0) == 0x80) cut--;
+        snprintf(buf, sizeof(buf), "%.*s...", cut, text);
+        Vector2 ts = MeasureTextEx(g_font, buf, font_size, 1);
+        if (ts.x <= COL_W[col] - 6) {
+            DrawTextEx(g_font, buf, (Vector2){ (float)COL_X[col], y }, font_size, 1, color);
+            return;
+        }
+        len = cut;
+    }
+}
+
 /* Заголовок таблицы (фиксированный, не скроллится) */
 static void draw_header(void) {
     DrawRectangle(0, HEADER_Y, SCREEN_W, ROW_H, HEADER_BG);
-    struct { int x; const char *t; } cols[] = {
-        { 10, "#" }, { 50, "Группа" }, { 120, "ФИО" },
-        { 440, "Специальность" }, { 610, "Форма" },
-        { 740, "Оценки" }, { 880, "Ср. балл" }
-    };
-    for (int i = 0; i < 7; i++)
-        DrawTextEx(g_font, cols[i].t,
-                   (Vector2){ (float)cols[i].x, HEADER_Y + (ROW_H - 16)/2 },
+    const char *titles[] = { "#", "Группа", "ФИО", "Специальность",
+                             "Форма", "Оценки", "Ср. балл" };
+    for (int i = 0; i < 7; i++) {
+        Vector2 sz = MeasureTextEx(g_font, titles[i], 16, 1);
+        float tx = COL_X[i] + (COL_W[i] - sz.x) / 2;
+        DrawTextEx(g_font, titles[i],
+                   (Vector2){ tx, HEADER_Y + (ROW_H - 16)/2 },
                    16, 1, HEADER_TEXT);
+    }
 }
 
 /* Одна строка таблицы */
 static void draw_row(int idx, int y, const Student *s) {
     DrawRectangle(0, y, SCREEN_W, ROW_H, (idx % 2 == 0) ? ROW_EVEN : ROW_ODD);
-    struct { int x; char buf[64]; } cols[7];
-    snprintf(cols[0].buf, sizeof(cols[0].buf), "%d", idx + 1);
-    snprintf(cols[1].buf, sizeof(cols[1].buf), "%d", s->group);
-    strcpy(cols[2].buf, s->full_name);
-    strcpy(cols[3].buf, s->speciality);
-    strcpy(cols[4].buf, s->form);
-    snprintf(cols[5].buf, sizeof(cols[5].buf), "%d %d %d %d",
+
+    char buf[7][64];
+    snprintf(buf[0], sizeof(buf[0]), "%d", idx + 1);
+    snprintf(buf[1], sizeof(buf[1]), "%d", s->group);
+    strcpy(buf[2], s->full_name);
+    strcpy(buf[3], s->speciality);
+    strcpy(buf[4], s->form);
+    snprintf(buf[5], sizeof(buf[5]), "%d %d %d %d",
              s->grades[0], s->grades[1], s->grades[2], s->grades[3]);
-    snprintf(cols[6].buf, sizeof(cols[6].buf), "%.2f", s->avg_score);
-    int xs[] = { 10, 50, 120, 440, 610, 740, 880 };
-    for (int i = 0; i < 7; i++) {
-        Color c = TEXT_COLOR;
-        if (i == 4) c = (strcmp(s->form, "бюджетная") == 0) ? TITLE_BUDGET : TITLE_PAID;
-        DrawTextEx(g_font, cols[i].buf,
-                   (Vector2){ (float)xs[i], y + (ROW_H - 14)/2 }, 14, 1, c);
-    }
+    snprintf(buf[6], sizeof(buf[6]), "%.2f", s->avg_score);
+
+    Color colors[] = {
+        TEXT_COLOR, TEXT_COLOR, TEXT_COLOR, TEXT_COLOR,
+        (strcmp(s->form, "бюджетная") == 0) ? TITLE_BUDGET : TITLE_PAID,
+        TEXT_COLOR, TEXT_COLOR
+    };
+
+    for (int i = 0; i < 7; i++)
+        draw_col_text(i, y + (ROW_H - 14) / 2, 14, buf[i], colors[i]);
 }
 
 /* Отрисовка полоски-заголовка для секции (бюджет / плат) */
@@ -546,13 +579,14 @@ int main(void) {
 
     /* Загружаем шрифт с кириллицей */
     {
-        int codepoints[512], cp_count = 0;
+        int codepoints[200], cp_count = 0;
         /* ASCII печатные символы */
         for (int i = 32; i < 127; i++) codepoints[cp_count++] = i;
-        /* Русская кириллица */
-        for (int i = 0x0400; i <= 0x04FF; i++) codepoints[cp_count++] = i;
-        /* Дополнение к кириллице */
-        for (int i = 0x0500; i <= 0x052F; i++) codepoints[cp_count++] = i;
+        /* Русские буквы А-Я (0x0410-0x042F), а-я (0x0430-0x044F) */
+        for (int i = 0x0410; i <= 0x044F; i++) codepoints[cp_count++] = i;
+        /* Ё (0x0401) и ё (0x0451) */
+        codepoints[cp_count++] = 0x0401;
+        codepoints[cp_count++] = 0x0451;
         g_font = LoadFontEx("C:/Windows/Fonts/arial.ttf", 48, codepoints, cp_count);
         if (g_font.texture.id == 0)
             g_font = GetFontDefault();
