@@ -10,6 +10,7 @@
                 "-o", "${workspaceFolder}\\student_ledger.exe",
                 "-IC:\\msys64\\ucrt64\\include",
                 "-LC:\\msys64\\ucrt64\\lib",
+                "-finput-charset=UTF-8", "-fexec-charset=UTF-8",
                 "-lraylib", "-lopengl32", "-lgdi32", "-lwinmm", "-mwindows"
             ],
             "group": {

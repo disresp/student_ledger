@@ -380,25 +380,27 @@ static const int COL_W[] = { 35, 70, 295, 240, 120, 130, 300 };
 /* Обрезать текст по ширине колонки, добавить ... если не влезает */
 static void draw_col_text(int col, int y, int font_size, const char *text, Color color) {
     Vector2 sz = MeasureTextEx(g_font, text, font_size, 1);
-    if (sz.x <= COL_W[col] - 6) {
+    int max_w = COL_W[col] - 6;
+    if (sz.x <= max_w) {
         DrawTextEx(g_font, text, (Vector2){ (float)COL_X[col], y }, font_size, 1, color);
         return;
     }
     /* Обрезаем, пока не влезет с "..." */
     char buf[128];
-    int len = (int)strlen(text);
-    while (len > 0) {
-        int cut = len;
-        /* Отступаем на один UTF-8 символ */
-        cut--;
+    int byte_len = (int)strlen(text);
+    while (byte_len > 0) {
+        /* Отступаем на один UTF-8 символ с конца */
+        int cut = byte_len - 1;
         while (cut > 0 && ((unsigned char)text[cut] & 0xC0) == 0x80) cut--;
-        snprintf(buf, sizeof(buf), "%.*s...", cut, text);
+        memcpy(buf, text, cut);
+        buf[cut] = '\0';
+        strcat(buf, "...");
         Vector2 ts = MeasureTextEx(g_font, buf, font_size, 1);
-        if (ts.x <= COL_W[col] - 6) {
+        if (ts.x <= max_w) {
             DrawTextEx(g_font, buf, (Vector2){ (float)COL_X[col], y }, font_size, 1, color);
             return;
         }
-        len = cut;
+        byte_len = cut;
     }
 }
 
@@ -579,17 +581,20 @@ int main(void) {
 
     /* Загружаем шрифт с кириллицей */
     {
-        int codepoints[200], cp_count = 0;
-        /* ASCII печатные символы */
+        int codepoints[192], cp_count = 0;
+        /* ASCII печатные символы (32-126) */
         for (int i = 32; i < 127; i++) codepoints[cp_count++] = i;
         /* Русские буквы А-Я (0x0410-0x042F), а-я (0x0430-0x044F) */
         for (int i = 0x0410; i <= 0x044F; i++) codepoints[cp_count++] = i;
         /* Ё (0x0401) и ё (0x0451) */
         codepoints[cp_count++] = 0x0401;
         codepoints[cp_count++] = 0x0451;
-        g_font = LoadFontEx("C:/Windows/Fonts/arial.ttf", 48, codepoints, cp_count);
-        if (g_font.texture.id == 0)
+        /* Пробуем загрузить Arial, если нет — встроенный шрифт */
+        g_font = LoadFontEx("C:/Windows/Fonts/arial.ttf", 32, codepoints, cp_count);
+        if (g_font.texture.id == 0) {
+            /* Запасной вариант: маленький встроенный шрифт (без кириллицы) */
             g_font = GetFontDefault();
+        }
     }
 
     calc_textbox_positions();
