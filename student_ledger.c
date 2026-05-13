@@ -73,37 +73,41 @@ static int  g_filename_mode = 0;
 #define ROW_Y_START (HEADER_Y + ROW_H + 2)
 #define TABLE_H     (SCREEN_H - ROW_Y_START - 28)
 
-/* Цвета интерфейса */
-#define BG_COLOR        CLITERAL(Color){ 245, 245, 255, 255 }
-#define HEADER_BG       CLITERAL(Color){  60,  60, 120, 255 }
-#define HEADER_TEXT     CLITERAL(Color){ 255, 255, 255, 255 }
-#define ROW_EVEN        CLITERAL(Color){ 255, 255, 255, 255 }
-#define ROW_ODD         CLITERAL(Color){ 235, 240, 250, 255 }
-#define ROW_SELECTED    CLITERAL(Color){ 200, 210, 255, 255 }
-#define BTN_COLOR       CLITERAL(Color){  70, 100, 180, 255 }
-#define BTN_HOVER       CLITERAL(Color){  90, 130, 220, 255 }
-#define BTN_ADD         CLITERAL(Color){  50, 150,  50, 255 }
-#define BTN_ADD_HOVER   CLITERAL(Color){  70, 190,  70, 255 }
-#define BTN_DEL         CLITERAL(Color){ 180,  50,  50, 255 }
-#define BTN_DEL_HOVER   CLITERAL(Color){ 220,  70,  70, 255 }
-#define BTN_SAVE        CLITERAL(Color){  50, 100, 180, 255 }
-#define BTN_SAVE_HOVER  CLITERAL(Color){  70, 130, 220, 255 }
-#define BTN_TEXT        CLITERAL(Color){ 255, 255, 255, 255 }
-#define INPUT_BG        CLITERAL(Color){ 255, 255, 255, 255 }
-#define INPUT_BORDER    CLITERAL(Color){ 100, 100, 100, 255 }
-#define FOCUS_BORDER    CLITERAL(Color){  30,  60, 180, 255 }
-#define RADIO_ACT       CLITERAL(Color){  70, 100, 180, 255 }
-#define RADIO_INACT     CLITERAL(Color){ 180, 180, 180, 255 }
-#define TEXT_COLOR      CLITERAL(Color){  20,  20,  20, 255 }
-#define LABEL_COLOR     CLITERAL(Color){  50,  50,  80, 255 }
-#define TITLE_BUDGET    CLITERAL(Color){   0, 130,  50, 255 }
-#define TITLE_PAID      CLITERAL(Color){ 200,  80,  30, 255 }
-#define STATUS_OK       CLITERAL(Color){   0, 130,  50, 255 }
-#define STATUS_ERR      CLITERAL(Color){ 200,  30,  30, 255 }
-#define BTN_CLEAR       CLITERAL(Color){ 190, 150,  40, 255 }
-#define BTN_CLEAR_HOVER CLITERAL(Color){ 220, 180,  60, 255 }
-#define BTN_UNDO        CLITERAL(Color){ 130,  90, 170, 255 }
-#define BTN_UNDO_HOVER  CLITERAL(Color){ 160, 120, 200, 255 }
+/* Цвета интерфейса — тёмная тема */
+#define BG_COLOR        CLITERAL(Color){  24,  24,  24, 255 }
+#define SIDE_BG         CLITERAL(Color){  30,  30,  35, 255 }
+#define SIDE_LINE       CLITERAL(Color){  50,  50,  55, 255 }
+#define PANEL_BG        CLITERAL(Color){  34,  34,  40, 255 }
+#define PANEL_BORDER    CLITERAL(Color){  50,  50,  58, 255 }
+#define HEADER_BG       CLITERAL(Color){  50,  55,  70, 255 }
+#define HEADER_TEXT     CLITERAL(Color){ 210, 215, 230, 255 }
+#define ROW_EVEN        CLITERAL(Color){  30,  30,  35, 255 }
+#define ROW_ODD         CLITERAL(Color){  35,  35,  42, 255 }
+#define ROW_SELECTED    CLITERAL(Color){  50,  60,  85, 255 }
+#define BTN_COLOR       CLITERAL(Color){  60,  90, 180, 255 }
+#define BTN_HOVER       CLITERAL(Color){  75, 110, 210, 255 }
+#define BTN_ADD          BTN_COLOR
+#define BTN_ADD_HOVER    BTN_HOVER
+#define BTN_DEL         CLITERAL(Color){ 180,  45,  45, 255 }
+#define BTN_DEL_HOVER   CLITERAL(Color){ 220,  60,  60, 255 }
+#define BTN_SAVE         BTN_COLOR
+#define BTN_SAVE_HOVER   BTN_HOVER
+#define BTN_CLEAR       CLITERAL(Color){  55,  55,  60, 255 }
+#define BTN_CLEAR_HOVER CLITERAL(Color){  70,  70,  80, 255 }
+#define BTN_UNDO        CLITERAL(Color){  55,  55,  65, 255 }
+#define BTN_UNDO_HOVER  CLITERAL(Color){  70,  70,  80, 255 }
+#define BTN_TEXT        CLITERAL(Color){ 220, 220, 230, 255 }
+#define INPUT_BG        CLITERAL(Color){  40,  40,  46, 255 }
+#define INPUT_BORDER    CLITERAL(Color){  70,  70,  80, 255 }
+#define FOCUS_BORDER    CLITERAL(Color){  80, 120, 220, 255 }
+#define RADIO_ACT       CLITERAL(Color){  80, 120, 220, 255 }
+#define RADIO_INACT     CLITERAL(Color){  80,  80,  90, 255 }
+#define TEXT_COLOR      CLITERAL(Color){ 200, 200, 210, 255 }
+#define LABEL_COLOR     CLITERAL(Color){ 170, 170, 180, 255 }
+#define TITLE_BUDGET    CLITERAL(Color){  60, 160,  80, 255 }
+#define TITLE_PAID      CLITERAL(Color){ 220, 130,  50, 255 }
+#define STATUS_OK       CLITERAL(Color){  60, 180,  80, 255 }
+#define STATUS_ERR      CLITERAL(Color){ 220,  60,  60, 255 }
 
 /* ==========================================================
  *  СТРУКТУРЫ
@@ -1400,48 +1404,32 @@ int main(void) {
         /* Фон панели редактирования (если не режим ввода имени) */
         if (!g_waiting_filename) {
             Rectangle pr = { (float)MAIN_X+8, (float)PANEL_Y, SCREEN_W - MAIN_X - 16, PANEL_H };
-            DrawRectangleRounded(pr, 0.08f, 6, (Color){ 235, 235, 250, 255 });
-            DrawRectangleRoundedLines(pr, 0.08f, 6, (Color){ 200, 200, 225, 255 });
-        }
-
-        /* Кнопки действий (верхняя панель) */
-        if (btn(MAIN_X+10, BTN_Y, 100, BTN_H, "Добавить",  BTN_ADD, BTN_ADD_HOVER))
-            { if (g_editing) action_confirm_edit(); action_add(); }
-        if (g_editing) {
-            if (btn(MAIN_X+120, BTN_Y, 80, BTN_H, "Готово", (Color){50,150,50,255}, (Color){70,190,70,255}))
-                action_confirm_edit();
-            if (btn(MAIN_X+208, BTN_Y, 36, BTN_H, "X",   (Color){180,50,50,255}, (Color){220,70,70,255}))
-                action_cancel_edit();
-        } else {
-            if (btn(MAIN_X+120, BTN_Y, 100, BTN_H, "Изменить", BTN_COLOR, BTN_HOVER))
-                action_edit_mode();
-        }
-        {   int dx = g_editing ? 22 : 0;
-            if (btn(MAIN_X+230+dx, BTN_Y, 90,  BTN_H, "Удалить",   BTN_DEL, BTN_DEL_HOVER))
-                action_delete();
-            if (btn(MAIN_X+330+dx, BTN_Y, 80,  BTN_H, "Сорт.",     BTN_COLOR, BTN_HOVER))
-                action_sort();
-            if (btn(MAIN_X+420+dx, BTN_Y, 80,  BTN_H, "Отл.+",     BTN_COLOR, BTN_HOVER))
-                action_excellent_paid();
-            if (btn(MAIN_X+510+dx, BTN_Y, 110, BTN_H, "По форме",  BTN_COLOR, BTN_HOVER))
-                action_by_form();
+            DrawRectangleRounded(pr, 0.08f, 6, PANEL_BG);
+            DrawRectangleRoundedLines(pr, 0.08f, 6, PANEL_BORDER);
         }
 
         /* Поля редактирования или ввод имени файла */
         if (g_waiting_filename) {
-            DrawRectangle(MAIN_X+4, PANEL_Y, SCREEN_W-MAIN_X-8, PANEL_H+10,
-                          (Color){ 240, 240, 250, 255 });
-            DrawRectangleLines(MAIN_X+4, PANEL_Y, SCREEN_W-MAIN_X-8, PANEL_H+10,
-                               (Color){ 200, 200, 225, 255 });
+            Rectangle pr = { (float)MAIN_X+8, (float)PANEL_Y, SCREEN_W-MAIN_X-16, (float)PANEL_H+10 };
+            DrawRectangleRounded(pr, 0.08f, 6, PANEL_BG);
+            DrawRectangleRoundedLines(pr, 0.08f, 6, PANEL_BORDER);
             const char *hint = (g_filename_mode==0) ? "Введите имя файла для импорта:"
                               : (g_filename_mode==1) ? "Введите имя файла для экспорта CSV:"
                               : "Введите имя файла для экспорта TXT:";
-            DrawTextEx(g_font, hint,
-                       (Vector2){ MAIN_X+12, PANEL_Y+8 }, 14, 1, LABEL_COLOR);
-            textbox(MAIN_X+12, PANEL_Y+30, 300, INPUT_H, "Файл:",
-                    g_temp_filename, 1);
-            if (btn(MAIN_X+320, PANEL_Y+30, 80, INPUT_H, "OK",
-                    (Color){50,150,50,255}, (Color){70,190,70,255})) {
+            DrawTextEx(g_font, hint, (Vector2){ pr.x+6, pr.y+8 }, 14, 1, LABEL_COLOR);
+
+            Rectangle fb = { pr.x+6, pr.y+34, 300, INPUT_H };
+            DrawRectangleRec(fb, INPUT_BG);
+            DrawRectangleLinesEx(fb, 2, FOCUS_BORDER);
+            DrawTextEx(g_font, g_temp_filename,
+                       (Vector2){ fb.x+4, fb.y+8 }, 14, 1, TEXT_COLOR);
+            if (((int)(GetTime()*2)%2==0))
+                DrawLineV((Vector2){ fb.x+4+MeasureTextEx(g_font,g_temp_filename,14,1).x, fb.y+6 },
+                          (Vector2){ fb.x+4+MeasureTextEx(g_font,g_temp_filename,14,1).x, fb.y+fb.height-6 },
+                          FOCUS_BORDER);
+
+            if (btn(MAIN_X+324, PANEL_Y+34, 75, INPUT_H, "OK",
+                    BTN_SAVE, BTN_SAVE_HOVER)) {
                 if (g_temp_filename_len > 0) {
                     if (g_filename_mode == 0) import_csv(g_temp_filename);
                     else if (g_filename_mode == 1) export_csv(g_temp_filename, g_display, g_display_count);
@@ -1449,8 +1437,8 @@ int main(void) {
                 }
                 g_waiting_filename = 0;
             }
-            if (btn(MAIN_X+408, PANEL_Y+30, 80, INPUT_H, "Отмена",
-                    (Color){180,50,50,255}, (Color){220,70,70,255}))
+            if (btn(MAIN_X+406, PANEL_Y+34, 75, INPUT_H, "Отмена",
+                    BTN_CLEAR, BTN_CLEAR_HOVER))
                 g_waiting_filename = 0;
         } else {
             textbox(MAIN_X+10, INPUT_Y, 240, INPUT_H, "Спец.:", g_inp_spec, g_focus == 0);
@@ -1474,58 +1462,131 @@ int main(void) {
             }
         }
 
-        draw_table();
+        if (!g_waiting_filename) draw_table();
 
-        /* Строка состояния */
-        const char *mode = "";
-        switch (g_view) {
-            case VIEW_ALL:            mode = "Все студенты"; break;
-            case VIEW_SORTED:         mode = "Сортировка по группам и ФИО"; break;
-            case VIEW_EXCELLENT_PAID: mode = "Отличники (платная форма)"; break;
-            case VIEW_BY_FORM:        mode = "Списки по форме обучения"; break;
-        }
-        char info[128];
-        snprintf(info, sizeof(info), "Режим: %s  |  Показано: %d из %d",
-                 mode, g_display_count, g_list.count);
-        DrawTextEx(g_font, info, (Vector2){ (float)MAIN_X, (float)SCREEN_H - 22 },
-                   14, 1, LABEL_COLOR);
+        {
+            if (!g_waiting_filename) {
+                const char *mode = "";
+                switch (g_view) {
+                    case VIEW_ALL:            mode = "Все студенты"; break;
+                    case VIEW_SORTED:         mode = "Сортировка по группам и ФИО"; break;
+                    case VIEW_EXCELLENT_PAID: mode = "Отличники (платная форма)"; break;
+                    case VIEW_BY_FORM:        mode = "Списки по форме обучения"; break;
+                }
+                char info[128];
+                snprintf(info, sizeof(info), "Режим: %s  |  Показано: %d из %d",
+                         mode, g_display_count, g_list.count);
+                DrawTextEx(g_font, info, (Vector2){ (float)MAIN_X, (float)SCREEN_H - 22 },
+                           14, 1, LABEL_COLOR);
 
-        /* Сообщение статуса */
-        double elapsed = GetTime() - g_status_time;
-        if (elapsed < 4.0 && g_status[0]) {
-            Color sc = (strncmp(g_status, "Ошибка", 6) == 0) ? STATUS_ERR : STATUS_OK;
-            if (elapsed > 3.0) sc.a = (unsigned char)(255 - (int)((elapsed - 3.0) * 255));
-            Vector2 sz = MeasureTextEx(g_font, g_status, 14, 1);
-            DrawTextEx(g_font, g_status,
-                       (Vector2){ (float)(SCREEN_W - sz.x - 10), (float)SCREEN_H - 22 },
-                       14, 1, sc);
+                double elapsed = GetTime() - g_status_time;
+                if (elapsed < 4.0 && g_status[0]) {
+                    Color sc = (strncmp(g_status, "Ошибка", 6) == 0) ? STATUS_ERR : STATUS_OK;
+                    if (elapsed > 3.0) sc.a = (unsigned char)(255 - (int)((elapsed - 3.0) * 255));
+                    Vector2 sz = MeasureTextEx(g_font, g_status, 14, 1);
+                    DrawTextEx(g_font, g_status,
+                               (Vector2){ (float)(SCREEN_W - sz.x - 10), (float)SCREEN_H - 22 },
+                               14, 1, sc);
+                }
+            }
         }
 
         /* === Боковая панель (поверх всего) === */
-        DrawRectangle(0, 0, SIDE_PANEL_W, SCREEN_H, (Color){ 230, 230, 240, 255 });
-        DrawLine(SIDE_PANEL_W, 0, SIDE_PANEL_W, SCREEN_H, (Color){ 200, 200, 210, 255 });
+        DrawRectangle(0, 0, SIDE_PANEL_W, SCREEN_H, SIDE_BG);
+        DrawLine(SIDE_PANEL_W, 0, SIDE_PANEL_W, SCREEN_H, SIDE_LINE);
         {
-            int sy = 10;
-            if (btn(5, sy, SIDE_PANEL_W-10, BTN_H, "Сохранить CSV", BTN_SAVE, BTN_SAVE_HOVER))
-                saveDbCsv(CSV_FILE, &g_list);
-            sy += BTN_H + 5;
-            if (btn(5, sy, SIDE_PANEL_W-10, BTN_H, "Загрузить CSV", BTN_SAVE, BTN_SAVE_HOVER))
-                { save_undo_state(); listClear(&g_list); loadDbCsv(CSV_FILE, &g_list); clear_input_fields(); g_selected_idx = -1; apply_filter(); }
-            sy += BTN_H + 5;
-            if (btn(5, sy, SIDE_PANEL_W-10, BTN_H, "Импорт CSV", BTN_COLOR, BTN_HOVER))
-                { g_temp_filename[0]='\0'; g_temp_filename_len=0; g_filename_mode=0; g_waiting_filename=1; }
-            sy += BTN_H + 5;
-            if (btn(5, sy, SIDE_PANEL_W-10, BTN_H, "Экспорт CSV", BTN_COLOR, BTN_HOVER))
-                { g_temp_filename[0]='\0'; g_temp_filename_len=0; g_filename_mode=1; g_waiting_filename=1; }
-            sy += BTN_H + 5;
-            if (btn(5, sy, SIDE_PANEL_W-10, BTN_H, "Экспорт TXT", BTN_COLOR, BTN_HOVER))
-                { g_temp_filename[0]='\0'; g_temp_filename_len=0; g_filename_mode=2; g_waiting_filename=1; }
-            sy += BTN_H + 5;
-            if (btn(5, sy, SIDE_PANEL_W-10, BTN_H, "Очистить", BTN_CLEAR, BTN_CLEAR_HOVER))
-                action_clear();
-            sy += BTN_H + 5;
-            if (btn(5, sy, SIDE_PANEL_W-10, BTN_H, "Отменить", BTN_UNDO, BTN_UNDO_HOVER))
-                action_undo();
+            int sy = 8, by;
+
+            /* --- Файл --- */
+            {
+                Rectangle r = { 4, (float)sy, SIDE_PANEL_W-8, 5*(BTN_H+4)+22 };
+                DrawRectangleRounded(r, 0.08f, 6, (Color){ 42, 44, 52, 255 });
+                DrawRectangleRoundedLines(r, 0.08f, 6, PANEL_BORDER);
+                by = sy + 6;
+                DrawTextEx(g_font, "ФАЙЛ", (Vector2){ 10, by }, 11, 1, LABEL_COLOR);
+                by += 18;
+                if (btn(6, by, SIDE_PANEL_W-12, BTN_H, "Сохранить CSV", BTN_SAVE, BTN_SAVE_HOVER))
+                    saveDbCsv(CSV_FILE, &g_list);
+                by += BTN_H + 4;
+                if (btn(6, by, SIDE_PANEL_W-12, BTN_H, "Загрузить CSV", BTN_SAVE, BTN_SAVE_HOVER))
+                    { save_undo_state(); listClear(&g_list); loadDbCsv(CSV_FILE, &g_list); clear_input_fields(); g_selected_idx = -1; apply_filter(); }
+                by += BTN_H + 4;
+                if (btn(6, by, SIDE_PANEL_W-12, BTN_H, "Импорт CSV", BTN_COLOR, BTN_HOVER))
+                    { g_temp_filename[0]='\0'; g_temp_filename_len=0; g_filename_mode=0; g_waiting_filename=1; }
+                by += BTN_H + 4;
+                if (btn(6, by, SIDE_PANEL_W-12, BTN_H, "Экспорт CSV", BTN_COLOR, BTN_HOVER))
+                    { g_temp_filename[0]='\0'; g_temp_filename_len=0; g_filename_mode=1; g_waiting_filename=1; }
+                by += BTN_H + 4;
+                if (btn(6, by, SIDE_PANEL_W-12, BTN_H, "Экспорт TXT", BTN_COLOR, BTN_HOVER))
+                    { g_temp_filename[0]='\0'; g_temp_filename_len=0; g_filename_mode=2; g_waiting_filename=1; }
+            }
+            sy += 5*(BTN_H+4) + 26;
+
+            /* --- Действия --- */
+            {
+                int rows = g_editing ? 2 : 3;
+                Rectangle r = { 4, (float)sy, SIDE_PANEL_W-8, rows*(BTN_H+4)+22 };
+                DrawRectangleRounded(r, 0.08f, 6, (Color){ 42, 44, 52, 255 });
+                DrawRectangleRoundedLines(r, 0.08f, 6, PANEL_BORDER);
+                by = sy + 6;
+                DrawTextEx(g_font, "ДЕЙСТВИЯ", (Vector2){ 10, by }, 11, 1, LABEL_COLOR);
+                by += 18;
+
+                if (btn(6, by, SIDE_PANEL_W-12, BTN_H, "Добавить", BTN_ADD, BTN_ADD_HOVER))
+                    action_add();
+                by += BTN_H + 4;
+
+                if (g_editing) {
+                    if (btn(6, by, SIDE_PANEL_W-12, BTN_H, "Готово", BTN_SAVE, BTN_SAVE_HOVER))
+                        action_confirm_edit();
+                    by += BTN_H + 4;
+                    if (btn(6, by, SIDE_PANEL_W-12, BTN_H, "Отмена", BTN_DEL, BTN_DEL_HOVER))
+                        action_cancel_edit();
+                    by += BTN_H + 4;
+                } else {
+                    if (btn(6, by, SIDE_PANEL_W-12, BTN_H, "Изменить", BTN_COLOR, BTN_HOVER))
+                        action_edit_mode();
+                    by += BTN_H + 4;
+                    if (btn(6, by, SIDE_PANEL_W-12, BTN_H, "Удалить", BTN_DEL, BTN_DEL_HOVER))
+                        action_delete();
+                    by += BTN_H + 4;
+                }
+            }
+            sy += (g_editing ? 3 : 3)*(BTN_H+4) + 26;
+
+            /* --- Фильтры --- */
+            {
+                Rectangle r = { 4, (float)sy, SIDE_PANEL_W-8, 3*(BTN_H+4)+22 };
+                DrawRectangleRounded(r, 0.08f, 6, (Color){ 42, 44, 52, 255 });
+                DrawRectangleRoundedLines(r, 0.08f, 6, PANEL_BORDER);
+                by = sy + 6;
+                DrawTextEx(g_font, "ФИЛЬТРЫ", (Vector2){ 10, by }, 11, 1, LABEL_COLOR);
+                by += 18;
+                if (btn(6, by, SIDE_PANEL_W-12, BTN_H, "Сортировка", BTN_COLOR, BTN_HOVER))
+                    action_sort();
+                by += BTN_H + 4;
+                if (btn(6, by, SIDE_PANEL_W-12, BTN_H, "Отличники", BTN_COLOR, BTN_HOVER))
+                    action_excellent_paid();
+                by += BTN_H + 4;
+                if (btn(6, by, SIDE_PANEL_W-12, BTN_H, "По форме", BTN_COLOR, BTN_HOVER))
+                    action_by_form();
+            }
+            sy += 3*(BTN_H+4) + 26;
+
+            /* --- Система --- */
+            {
+                Rectangle r = { 4, (float)sy, SIDE_PANEL_W-8, 2*(BTN_H+4)+22 };
+                DrawRectangleRounded(r, 0.08f, 6, (Color){ 42, 44, 52, 255 });
+                DrawRectangleRoundedLines(r, 0.08f, 6, PANEL_BORDER);
+                by = sy + 6;
+                DrawTextEx(g_font, "СИСТЕМА", (Vector2){ 10, by }, 11, 1, LABEL_COLOR);
+                by += 18;
+                if (btn(6, by, SIDE_PANEL_W-12, BTN_H, "Очистить", BTN_CLEAR, BTN_CLEAR_HOVER))
+                    action_clear();
+                by += BTN_H + 4;
+                if (btn(6, by, SIDE_PANEL_W-12, BTN_H, "Отменить", BTN_UNDO, BTN_UNDO_HOVER))
+                    action_undo();
+            }
         }
 
         EndDrawing();
