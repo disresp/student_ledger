@@ -156,8 +156,14 @@ typedef enum {
  *  ГЛОБАЛЬНЫЕ ПЕРЕМЕННЫЕ
  * ========================================================== */
 
+
+#define PAGE_TABLE  0
+#define PAGE_FILE   1
+static int g_current_page = PAGE_TABLE;
+#define UNDO_DEPTH  10
 static List g_list = { NULL, NULL, 0 };      /* основной список */
-static List g_undo_list = { NULL, NULL, 0 }; /* резервная копия для отмены */
+static List g_undo_stack[UNDO_DEPTH];         /* стек для многоуровневой отмены */
+static int  g_undo_top = -1;                  /* вершина стека (-1 = пусто) */
 static Student **g_display = NULL;            /* массив указателей для отображения */
 static int g_display_count = 0;               /* количество отображаемых записей */
 static ViewMode g_view = VIEW_ALL;            /* текущий режим просмотра */
@@ -324,10 +330,17 @@ static void listCopy(List *dst, const List *src) {
 }
 
 /*
- *  save_undo_state – сохраняет копию g_list в g_undo_list.
+ *  save_undo_state – сохраняет копию g_list в стек отмены.
  */
 static void save_undo_state(void) {
-    listCopy(&g_undo_list, &g_list);
+    if (g_undo_top < UNDO_DEPTH - 1) {
+        g_undo_top++;
+    } else {
+        listClear(&g_undo_stack[0]);
+        for (int i = 0; i < UNDO_DEPTH - 1; i++)
+            g_undo_stack[i] = g_undo_stack[i + 1];
+    }
+    listCopy(&g_undo_stack[g_undo_top], &g_list);
 }
 
 /* ==========================================================
@@ -908,12 +921,12 @@ static void action_clear(void) {
  *  редактирование, удаление, загрузку).
  */
 static void action_undo(void) {
-    if (g_undo_list.count == 0) {
+    if (g_undo_top < 0) {
         set_status("Нет действий для отмены");
         return;
     }
     listClear(&g_list);
-    Student *cur = g_undo_list.head;
+    Student *cur = g_undo_stack[g_undo_top].head;
     while (cur) {
         Student *s = newStudent(cur->speciality, cur->group, cur->full_name,
                                 cur->form, cur->grades[0], cur->grades[1],
@@ -921,7 +934,8 @@ static void action_undo(void) {
         if (s) listPushBack(&g_list, s);
         cur = cur->next;
     }
-    listClear(&g_undo_list);
+    listClear(&g_undo_stack[g_undo_top]);
+    g_undo_top--;
     clear_input_fields();
     g_selected_idx = -1;
     g_focus = -1;
@@ -1364,10 +1378,9 @@ int main(void) {
             if (g_scroll > max_scroll) g_scroll = (float)max_scroll;
         }
 
-        /* Обработка кликов */
-        if (IsMouseButtonPressed(MOUSE_LEFT_BUTTON)) {
-            Vector2 m = GetMousePosition();
-
+        /* Обработка кликов (только вне боковой панели) */
+        Vector2 m = GetMousePosition();
+        if (IsMouseButtonPressed(MOUSE_LEFT_BUTTON) && m.x >= SIDE_PANEL_W) {
             /* Поля редактирования (8 шт.) */
             int inp_x[] = { MAIN_X+10, MAIN_X+260, MAIN_X+380, MAIN_X+670, MAIN_X+808, MAIN_X+858, MAIN_X+908, MAIN_X+958 };
             int inp_w[] = { 240, 110, 280, 130, 46, 46, 46, 46 };
@@ -1401,130 +1414,148 @@ int main(void) {
         BeginDrawing();
         ClearBackground(BG_COLOR);
 
-        /* Фон панели редактирования (если не режим ввода имени) */
-        if (!g_waiting_filename) {
-            Rectangle pr = { (float)MAIN_X+8, (float)PANEL_Y, SCREEN_W - MAIN_X - 16, PANEL_H };
-            DrawRectangleRounded(pr, 0.08f, 6, PANEL_BG);
-            DrawRectangleRoundedLines(pr, 0.08f, 6, PANEL_BORDER);
-        }
-
-        /* Поля редактирования или ввод имени файла */
-        if (g_waiting_filename) {
-            Rectangle pr = { (float)MAIN_X+8, (float)PANEL_Y, SCREEN_W-MAIN_X-16, (float)PANEL_H+10 };
-            DrawRectangleRounded(pr, 0.08f, 6, PANEL_BG);
-            DrawRectangleRoundedLines(pr, 0.08f, 6, PANEL_BORDER);
-            const char *hint = (g_filename_mode==0) ? "Введите имя файла для импорта:"
-                              : (g_filename_mode==1) ? "Введите имя файла для экспорта CSV:"
-                              : "Введите имя файла для экспорта TXT:";
-            DrawTextEx(g_font, hint, (Vector2){ pr.x+6, pr.y+8 }, 14, 1, LABEL_COLOR);
-
-            Rectangle fb = { pr.x+6, pr.y+34, 300, INPUT_H };
-            DrawRectangleRec(fb, INPUT_BG);
-            DrawRectangleLinesEx(fb, 2, FOCUS_BORDER);
-            DrawTextEx(g_font, g_temp_filename,
-                       (Vector2){ fb.x+4, fb.y+8 }, 14, 1, TEXT_COLOR);
-            if (((int)(GetTime()*2)%2==0))
-                DrawLineV((Vector2){ fb.x+4+MeasureTextEx(g_font,g_temp_filename,14,1).x, fb.y+6 },
-                          (Vector2){ fb.x+4+MeasureTextEx(g_font,g_temp_filename,14,1).x, fb.y+fb.height-6 },
-                          FOCUS_BORDER);
-
-            if (btn(MAIN_X+324, PANEL_Y+34, 75, INPUT_H, "OK",
-                    BTN_SAVE, BTN_SAVE_HOVER)) {
-                if (g_temp_filename_len > 0) {
-                    if (g_filename_mode == 0) import_csv(g_temp_filename);
-                    else if (g_filename_mode == 1) export_csv(g_temp_filename, g_display, g_display_count);
-                    else export_txt(g_temp_filename, g_display, g_display_count);
+        /* Страница файлов */
+        if (g_current_page == PAGE_FILE) {
+            int fx = MAIN_X + 30, fy = PANEL_Y + 10;
+            DrawTextEx(g_font, "Файловые операции", (Vector2){ (float)fx, (float)fy }, 22, 1, BTN_TEXT);
+            fy += 40;
+            const char *fnames[] = { "Сохранить CSV","Загрузить CSV","Импорт CSV","Экспорт CSV","Экспорт TXT" };
+            const char *fdesc[] = {
+                "Сохранить всю базу в students.csv",
+                "Загрузить базу из students.csv (заменяет текущую)",
+                "Добавить записи из произвольного CSV-файла",
+                "Экспортировать отображаемый список в CSV-файл",
+                "Экспортировать отчёт в текстовый файл"
+            };
+            for (int i = 0; i < 5; i++) {
+                Color bc = (i < 2) ? BTN_SAVE : BTN_COLOR;
+                Color bh = (i < 2) ? BTN_SAVE_HOVER : BTN_HOVER;
+                if (btn(fx, fy, 210, BTN_H+4, fnames[i], bc, bh)) {
+                    switch (i) {
+                        case 0: saveDbCsv(CSV_FILE, &g_list); break;
+                        case 1: save_undo_state(); listClear(&g_list); loadDbCsv(CSV_FILE, &g_list); clear_input_fields(); g_selected_idx = -1; apply_filter(); break;
+                        case 2: g_temp_filename[0]='\0'; g_temp_filename_len=0; g_filename_mode=0; g_waiting_filename=1; break;
+                        case 3: g_temp_filename[0]='\0'; g_temp_filename_len=0; g_filename_mode=1; g_waiting_filename=1; break;
+                        case 4: g_temp_filename[0]='\0'; g_temp_filename_len=0; g_filename_mode=2; g_waiting_filename=1; break;
+                    }
                 }
-                g_waiting_filename = 0;
-            }
-            if (btn(MAIN_X+406, PANEL_Y+34, 75, INPUT_H, "Отмена",
-                    BTN_CLEAR, BTN_CLEAR_HOVER))
-                g_waiting_filename = 0;
-        } else {
-            textbox(MAIN_X+10, INPUT_Y, 240, INPUT_H, "Спец.:", g_inp_spec, g_focus == 0);
-            textbox(MAIN_X+260, INPUT_Y, 110, INPUT_H, "Груп.:", g_inp_group, g_focus == 1);
-            textbox(MAIN_X+380, INPUT_Y, 280, INPUT_H, "ФИО:",   g_inp_name,  g_focus == 2);
-            textbox(MAIN_X+670, INPUT_Y, 130, INPUT_H, "Форма:", g_inp_form,  g_focus == 3);
-
-            const char *grade_labels[] = { "1:", "2:", "3:", "4:" };
-            int gx = MAIN_X+808;
-            for (int i = 0; i < GRADES; i++) {
-                textbox(gx, INPUT_Y, 46, INPUT_H, grade_labels[i],
-                        g_inp_grades[i], g_focus == 4 + i);
-                gx += 50;
-            }
-
-            const char *form_items[] = { "Все", "Бюджет", "Плат" };
-            {
-                int old_form = g_filter_form;
-                g_filter_form = radio_group(MAIN_X+1010, INPUT_Y, INPUT_H, form_items, 3, g_filter_form);
-                if (g_filter_form != old_form && !g_editing) apply_filter();
+                DrawTextEx(g_font, fdesc[i], (Vector2){ (float)(fx + 220), fy+6 }, 13, 1, LABEL_COLOR);
+                fy += BTN_H + 16;
             }
         }
 
-        if (!g_waiting_filename) draw_table();
-
-        {
+        /* Страница с таблицей */
+        if (g_current_page == PAGE_TABLE) {
+            /* Фон панели редактирования */
             if (!g_waiting_filename) {
-                const char *mode = "";
-                switch (g_view) {
-                    case VIEW_ALL:            mode = "Все студенты"; break;
-                    case VIEW_SORTED:         mode = "Сортировка по группам и ФИО"; break;
-                    case VIEW_EXCELLENT_PAID: mode = "Отличники (платная форма)"; break;
-                    case VIEW_BY_FORM:        mode = "Списки по форме обучения"; break;
-                }
-                char info[128];
-                snprintf(info, sizeof(info), "Режим: %s  |  Показано: %d из %d",
-                         mode, g_display_count, g_list.count);
-                DrawTextEx(g_font, info, (Vector2){ (float)MAIN_X, (float)SCREEN_H - 22 },
-                           14, 1, LABEL_COLOR);
+                Rectangle pr = { (float)MAIN_X+8, (float)PANEL_Y, SCREEN_W - MAIN_X - 16, PANEL_H };
+                DrawRectangleRounded(pr, 0.08f, 6, PANEL_BG);
+                DrawRectangleRoundedLines(pr, 0.08f, 6, PANEL_BORDER);
+            }
 
-                double elapsed = GetTime() - g_status_time;
-                if (elapsed < 4.0 && g_status[0]) {
-                    Color sc = (strncmp(g_status, "Ошибка", 6) == 0) ? STATUS_ERR : STATUS_OK;
-                    if (elapsed > 3.0) sc.a = (unsigned char)(255 - (int)((elapsed - 3.0) * 255));
-                    Vector2 sz = MeasureTextEx(g_font, g_status, 14, 1);
-                    DrawTextEx(g_font, g_status,
-                               (Vector2){ (float)(SCREEN_W - sz.x - 10), (float)SCREEN_H - 22 },
-                               14, 1, sc);
+            /* Поля редактирования или ввод имени файла */
+            if (g_waiting_filename) {
+                Rectangle pr = { (float)MAIN_X+8, (float)PANEL_Y, SCREEN_W-MAIN_X-16, (float)PANEL_H+10 };
+                DrawRectangleRounded(pr, 0.08f, 6, PANEL_BG);
+                DrawRectangleRoundedLines(pr, 0.08f, 6, PANEL_BORDER);
+                const char *hint = (g_filename_mode==0) ? "Введите имя файла для импорта:"
+                                  : (g_filename_mode==1) ? "Введите имя файла для экспорта CSV:"
+                                  : "Введите имя файла для экспорта TXT:";
+                DrawTextEx(g_font, hint, (Vector2){ pr.x+6, pr.y+8 }, 14, 1, LABEL_COLOR);
+
+                Rectangle fb = { pr.x+6, pr.y+34, 300, INPUT_H };
+                DrawRectangleRec(fb, INPUT_BG);
+                DrawRectangleLinesEx(fb, 2, FOCUS_BORDER);
+                DrawTextEx(g_font, g_temp_filename,
+                           (Vector2){ fb.x+4, fb.y+8 }, 14, 1, TEXT_COLOR);
+                if (((int)(GetTime()*2)%2==0))
+                    DrawLineV((Vector2){ fb.x+4+MeasureTextEx(g_font,g_temp_filename,14,1).x, fb.y+6 },
+                              (Vector2){ fb.x+4+MeasureTextEx(g_font,g_temp_filename,14,1).x, fb.y+fb.height-6 },
+                              FOCUS_BORDER);
+
+                if (btn(MAIN_X+324, PANEL_Y+34, 75, INPUT_H, "OK",
+                        BTN_SAVE, BTN_SAVE_HOVER)) {
+                    if (g_temp_filename_len > 0) {
+                        if (g_filename_mode == 0) import_csv(g_temp_filename);
+                        else if (g_filename_mode == 1) export_csv(g_temp_filename, g_display, g_display_count);
+                        else export_txt(g_temp_filename, g_display, g_display_count);
+                    }
+                    g_waiting_filename = 0;
+                }
+                if (btn(MAIN_X+406, PANEL_Y+34, 75, INPUT_H, "Отмена",
+                        BTN_CLEAR, BTN_CLEAR_HOVER))
+                    g_waiting_filename = 0;
+            } else {
+                textbox(MAIN_X+10, INPUT_Y, 240, INPUT_H, "Спец.:", g_inp_spec, g_focus == 0);
+                textbox(MAIN_X+260, INPUT_Y, 110, INPUT_H, "Груп.:", g_inp_group, g_focus == 1);
+                textbox(MAIN_X+380, INPUT_Y, 280, INPUT_H, "ФИО:",   g_inp_name,  g_focus == 2);
+                textbox(MAIN_X+670, INPUT_Y, 130, INPUT_H, "Форма:", g_inp_form,  g_focus == 3);
+
+                const char *grade_labels[] = { "1:", "2:", "3:", "4:" };
+                int gx = MAIN_X+808;
+                for (int i = 0; i < GRADES; i++) {
+                    textbox(gx, INPUT_Y, 46, INPUT_H, grade_labels[i],
+                            g_inp_grades[i], g_focus == 4 + i);
+                    gx += 50;
+                }
+
+                const char *form_items[] = { "Все", "Бюджет", "Плат" };
+                {
+                    int old_form = g_filter_form;
+                    g_filter_form = radio_group(MAIN_X+1010, INPUT_Y, INPUT_H, form_items, 3, g_filter_form);
+                    if (g_filter_form != old_form && !g_editing) apply_filter();
                 }
             }
+
+            if (!g_waiting_filename) draw_table();
+
+            {
+                if (!g_waiting_filename) {
+                    const char *mode = "";
+                    switch (g_view) {
+                        case VIEW_ALL:            mode = "Все студенты"; break;
+                        case VIEW_SORTED:         mode = "Сортировка по группам и ФИО"; break;
+                        case VIEW_EXCELLENT_PAID: mode = "Отличники (платная форма)"; break;
+                        case VIEW_BY_FORM:        mode = "Списки по форме обучения"; break;
+                    }
+                    char info[128];
+                    snprintf(info, sizeof(info), "Режим: %s  |  Показано: %d из %d",
+                             mode, g_display_count, g_list.count);
+                    DrawTextEx(g_font, info, (Vector2){ (float)MAIN_X, (float)SCREEN_H - 22 },
+                               14, 1, LABEL_COLOR);
+
+                    double elapsed = GetTime() - g_status_time;
+                    if (elapsed < 4.0 && g_status[0]) {
+                        Color sc = (strncmp(g_status, "Ошибка", 6) == 0) ? STATUS_ERR : STATUS_OK;
+                        if (elapsed > 3.0) sc.a = (unsigned char)(255 - (int)((elapsed - 3.0) * 255));
+                        Vector2 sz = MeasureTextEx(g_font, g_status, 14, 1);
+                        DrawTextEx(g_font, g_status,
+                                   (Vector2){ (float)(SCREEN_W - sz.x - 10), (float)SCREEN_H - 22 },
+                                   14, 1, sc);
+                    }
+                }
+            }
+
+        /* Закрываем PAGE_TABLE */
         }
 
-        /* === Боковая панель (поверх всего) === */
+        /* === Боковая панель === */
         DrawRectangle(0, 0, SIDE_PANEL_W, SCREEN_H, SIDE_BG);
         DrawLine(SIDE_PANEL_W, 0, SIDE_PANEL_W, SCREEN_H, SIDE_LINE);
         {
             int sy = 8, by;
 
-            /* --- Файл --- */
-            {
-                Rectangle r = { 4, (float)sy, SIDE_PANEL_W-8, 5*(BTN_H+4)+22 };
-                DrawRectangleRounded(r, 0.08f, 6, (Color){ 42, 44, 52, 255 });
-                DrawRectangleRoundedLines(r, 0.08f, 6, PANEL_BORDER);
-                by = sy + 6;
-                DrawTextEx(g_font, "ФАЙЛ", (Vector2){ 10, by }, 11, 1, LABEL_COLOR);
-                by += 18;
-                if (btn(6, by, SIDE_PANEL_W-12, BTN_H, "Сохранить CSV", BTN_SAVE, BTN_SAVE_HOVER))
-                    saveDbCsv(CSV_FILE, &g_list);
-                by += BTN_H + 4;
-                if (btn(6, by, SIDE_PANEL_W-12, BTN_H, "Загрузить CSV", BTN_SAVE, BTN_SAVE_HOVER))
-                    { save_undo_state(); listClear(&g_list); loadDbCsv(CSV_FILE, &g_list); clear_input_fields(); g_selected_idx = -1; apply_filter(); }
-                by += BTN_H + 4;
-                if (btn(6, by, SIDE_PANEL_W-12, BTN_H, "Импорт CSV", BTN_COLOR, BTN_HOVER))
-                    { g_temp_filename[0]='\0'; g_temp_filename_len=0; g_filename_mode=0; g_waiting_filename=1; }
-                by += BTN_H + 4;
-                if (btn(6, by, SIDE_PANEL_W-12, BTN_H, "Экспорт CSV", BTN_COLOR, BTN_HOVER))
-                    { g_temp_filename[0]='\0'; g_temp_filename_len=0; g_filename_mode=1; g_waiting_filename=1; }
-                by += BTN_H + 4;
-                if (btn(6, by, SIDE_PANEL_W-12, BTN_H, "Экспорт TXT", BTN_COLOR, BTN_HOVER))
-                    { g_temp_filename[0]='\0'; g_temp_filename_len=0; g_filename_mode=2; g_waiting_filename=1; }
+            /* Nav: Таблица (только на странице файла) */
+            if (g_current_page == PAGE_FILE) {
+                if (btn(4, sy, SIDE_PANEL_W-8, BTN_H, "< Таблица",
+                        (Color){42,44,52,255}, (Color){55,58,68,255}))
+                    g_current_page = PAGE_TABLE;
+                sy += BTN_H + 8;
             }
-            sy += 5*(BTN_H+4) + 26;
 
             /* --- Действия --- */
             {
-                int rows = g_editing ? 2 : 3;
+                int rows = g_editing ? 3 : 3;
                 Rectangle r = { 4, (float)sy, SIDE_PANEL_W-8, rows*(BTN_H+4)+22 };
                 DrawRectangleRounded(r, 0.08f, 6, (Color){ 42, 44, 52, 255 });
                 DrawRectangleRoundedLines(r, 0.08f, 6, PANEL_BORDER);
@@ -1573,6 +1604,14 @@ int main(void) {
             }
             sy += 3*(BTN_H+4) + 26;
 
+            /* Nav: Файл (открывает страницу файлов) */
+            {
+                Color c = (g_current_page == PAGE_FILE) ? (Color){55,58,68,255} : (Color){42,44,52,255};
+                if (btn(4, sy, SIDE_PANEL_W-8, BTN_H, "> Файл", c, (Color){60,64,75,255}))
+                    g_current_page = PAGE_FILE;
+                sy += BTN_H + 8;
+            }
+
             /* --- Система --- */
             {
                 Rectangle r = { 4, (float)sy, SIDE_PANEL_W-8, 2*(BTN_H+4)+22 };
@@ -1597,7 +1636,7 @@ int main(void) {
 
     /* Очистка памяти */
     listClear(&g_list);
-    listClear(&g_undo_list);
+    for (int i = 0; i <= g_undo_top; i++) listClear(&g_undo_stack[i]);
     if (g_display) free(g_display);
 
     UnloadFont(g_font);
