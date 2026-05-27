@@ -257,3 +257,102 @@ void loadFromFile(StudentNode** head, const char* filename) {
 
     fclose(f);
 }
+
+/* ============================================================
+ *  ФУНКЦИИ ДЛЯ СООТВЕТСТВИЯ ОТЧЁТУ prst.docx
+ * ============================================================ */
+
+void splitListPublic(StudentNode* source, StudentNode** frontRef, StudentNode** backRef) {
+    if (!source || !source->next) { *frontRef = source; *backRef = NULL; return; }
+    StudentNode* slow = source;
+    StudentNode* fast = source->next;
+    while (fast && fast->next) { slow = slow->next; fast = fast->next->next; }
+    *frontRef = source;
+    *backRef = slow->next;
+    slow->next = NULL;
+}
+
+void mergePublic(StudentNode* node_a, StudentNode* node_b, StudentNode** merged_list) {
+    *merged_list = merge(node_a, node_b);
+}
+
+void mergeSortPublic(StudentNode** head) {
+    *head = mergeSort(*head);
+}
+
+void addStudent(StudentNode** list, Student student, int* added) {
+    StudentNode* node = (StudentNode*)malloc(sizeof(StudentNode));
+    if (!node) { *added = 0; return; }
+    node->student = student;
+    node->next = NULL;
+    pushBack(list, node);
+    *added = 1;
+}
+
+void deleteNode(StudentNode** list, StudentNode* node, StudentNode* prev, int* deleted) {
+    if (!list || !*list || !node) { *deleted = 0; return; }
+    if (prev) prev->next = node->next; else *list = node->next;
+    free(node);
+    *deleted = 1;
+}
+
+void updateStudent(StudentNode** list, const char* oldFullName, Student newStudent, int* updated) {
+    StudentNode* cur = *list;
+    while (cur) {
+        if (strcmp(cur->student.fullName, oldFullName) == 0) {
+            copyStudentData(&cur->student, &newStudent);
+            *updated = 1;
+            return;
+        }
+        cur = cur->next;
+    }
+    *updated = 0;
+}
+
+void findStudentByName(StudentNode* list, const char* fullName, Student* found_student) {
+    while (list) {
+        if (strcmp(list->student.fullName, fullName) == 0) {
+            copyStudentData(found_student, &list->student);
+            return;
+        }
+        list = list->next;
+    }
+    memset(found_student, 0, sizeof(Student));
+}
+
+void findNodeByName(StudentNode* list, const char* fullName, StudentNode** found_node) {
+    *found_node = NULL;
+    while (list) {
+        if (strcmp(list->student.fullName, fullName) == 0) { *found_node = list; return; }
+        list = list->next;
+    }
+}
+
+void addGrade(Student* student, int grade, int* is_successful) {
+    if (student->gradeCount >= 10 || grade < 1 || grade > 10) { *is_successful = 0; return; }
+    student->grades[student->gradeCount++] = grade;
+    *is_successful = 1;
+}
+
+void hasFailingGrades(const Student* student, int* is_failing) {
+    for (int i = 0; i < student->gradeCount; i++) {
+        if (student->grades[i] <= 4) { *is_failing = 1; return; }
+    }
+    *is_failing = 0;
+}
+
+void getStudentsWithoutFailingGrades(StudentNode* list, StudentNode** filtered_list) {
+    *filtered_list = NULL;
+    while (list) {
+        int hasFailing; hasFailingGrades(&list->student, &hasFailing);
+        if (!hasFailing) {
+            StudentNode* node = (StudentNode*)malloc(sizeof(StudentNode));
+            if (node) { node->student = list->student; node->next = NULL; pushBack(filtered_list, node); }
+        }
+        list = list->next;
+    }
+}
+
+void copyStudent(Student* dest, const Student* src) {
+    copyStudentData(dest, src);
+}

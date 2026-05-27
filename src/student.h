@@ -209,6 +209,18 @@ int isExcellentBudget(Student student);
 void copyStudentData(Student* dst, const Student* src);
 void saveToFile(StudentNode* head, const char* filename);
 void loadFromFile(StudentNode** head, const char* filename);
+void splitListPublic(StudentNode* source, StudentNode** frontRef, StudentNode** backRef);
+void mergePublic(StudentNode* node_a, StudentNode* node_b, StudentNode** merged_list);
+void mergeSortPublic(StudentNode** head);
+void addStudent(StudentNode** list, Student student, int* added);
+void deleteNode(StudentNode** list, StudentNode* node, StudentNode* prev, int* deleted);
+void updateStudent(StudentNode** list, const char* oldFullName, Student newStudent, int* updated);
+void findStudentByName(StudentNode* list, const char* fullName, Student* found_student);
+void findNodeByName(StudentNode* list, const char* fullName, StudentNode** found_node);
+void addGrade(Student* student, int grade, int* is_successful);
+void hasFailingGrades(const Student* student, int* is_failing);
+void getStudentsWithoutFailingGrades(StudentNode* list, StudentNode** filtered_list);
+void copyStudent(Student* dest, const Student* src);
 
 /* --- csv.h --- */
 void set_workdir_to_exe_dir(void);
@@ -226,6 +238,9 @@ int registerUser(const char* username, const char* password);
 int loginUser(const char* username, const char* password);
 void saveUsers(void);
 void drawLoginForm(void);
+void userExistsEx(const char* username, int* exists);
+void registerUserEx(const char* username, const char* password, int* success);
+void loginUserEx(const char* username, const char* password, int* success);
 
 /* --- ui.h --- */
 int drawButton(int x, int y, int w, int h, const char* text, Color normal, Color hover);

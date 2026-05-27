@@ -283,3 +283,8 @@ void drawLoginForm(void) {
         g_textBox.activeField = (g_textBox.activeField == 0) ? 1 : 0;
     }
 }
+
+/* Обёртки с выходными параметрами (для соответствия отчету) */
+void userExistsEx(const char* username, int* exists) { *exists = userExists(username); }
+void registerUserEx(const char* username, const char* password, int* success) { *success = registerUser(username, password); }
+void loginUserEx(const char* username, const char* password, int* success) { *success = loginUser(username, password); }
